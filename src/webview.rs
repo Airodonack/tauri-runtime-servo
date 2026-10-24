@@ -30,6 +30,7 @@ use crate::dialog::OpenDialogs;
 use crate::input;
 use crate::protocol::{SchemeHandlers, to_servo_url, to_tauri_url};
 use crate::runtime::{Context, Message, ServoRuntime, WebviewId};
+use crate::webdriver::WebDriver;
 use crate::x11::ChildWindow;
 
 pub type WebviewEventHandler = Box<dyn Fn(&WebviewEvent) + Send>;
@@ -74,6 +75,8 @@ pub struct ServoWebview {
     pub pending_evals: PendingEvals,
     pub label: String,
     pub schemes: SchemeHandlers,
+    /// The page's dialogs on screen, which WebDriver answers as prompts.
+    pub dialogs: Rc<OpenDialogs>,
 }
 
 impl Drop for ServoWebview {
@@ -203,6 +206,7 @@ struct Delegate {
     document_title_changed: Option<Box<DocumentTitleChangedHandler>>,
     pending_evals: PendingEvals,
     schemes: SchemeHandlers,
+    webdriver: Rc<WebDriver>,
 }
 
 // tauri-runtime's names for these; its own aliases are private.
@@ -220,7 +224,10 @@ impl WebViewDelegate for Delegate {
     fn notify_load_status_changed(&self, webview: WebView, status: LoadStatus) {
         let event = match status {
             LoadStatus::Started => PageLoadEvent::Started,
-            LoadStatus::Complete => PageLoadEvent::Finished,
+            LoadStatus::Complete => {
+                self.webdriver.load_complete(webview.id());
+                PageLoadEvent::Finished
+            }
             LoadStatus::HeadParsed => {
                 // The document exists and the initialization scripts have run.
                 let pending = self.pending_evals.borrow_mut().take();
@@ -252,10 +259,24 @@ impl WebViewDelegate for Delegate {
         self.schemes.intercept(webview.id(), load);
     }
 
-    fn show_embedder_control(&self, _webview: WebView, control: EmbedderControl) {
+    fn notify_traversal_complete(&self, _webview: WebView, traversal: servo::TraversalId) {
+        self.webdriver.traversal_complete(traversal);
+    }
+
+    fn notify_input_event_handled(
+        &self,
+        _webview: WebView,
+        event: servo::InputEventId,
+        _result: servo::InputEventResult,
+    ) {
+        self.webdriver.input_event_handled(event);
+    }
+
+    fn show_embedder_control(&self, webview: WebView, control: EmbedderControl) {
         let id = control.id();
         match control {
             EmbedderControl::SimpleDialog(dialog) => {
+                self.webdriver.dialog_shown(webview.id());
                 let parent = self
                     .window
                     .upgrade()
@@ -415,14 +436,16 @@ pub fn create_webview<T: UserEvent>(
     })?;
 
     let pending_evals: PendingEvals = Rc::new(RefCell::new(Some(Vec::new())));
+    let dialogs: Rc<OpenDialogs> = Default::default();
     let delegate = Rc::new(Delegate {
         window: Rc::downgrade(window),
-        dialogs: Default::default(),
+        dialogs: dialogs.clone(),
         on_page_load: on_page_load_handler,
         navigation_handler,
         document_title_changed: document_title_changed_handler,
         pending_evals: pending_evals.clone(),
         schemes: context.schemes.clone(),
+        webdriver: context.main_thread.webdriver.clone(),
     });
     let servo = context.servo(data_directory.as_deref());
     let user_content = Rc::new(UserContentManager::new(&servo));
@@ -454,6 +477,7 @@ pub fn create_webview<T: UserEvent>(
         pending_evals,
         label: label.clone(),
         schemes: context.schemes.clone(),
+        dialogs,
     });
     let weak = Rc::downgrade(&inner);
     input::connect_discrete_scroll(gtk_window, move || {
