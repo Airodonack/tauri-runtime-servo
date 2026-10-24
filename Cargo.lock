@@ -3457,6 +3457,7 @@ dependencies = [
  "log",
  "tauri",
  "tauri-build",
+ "tauri-plugin-clipboard-manager",
  "tauri-runtime-servo",
 ]
 
@@ -9792,6 +9793,8 @@ dependencies = [
  "tokio",
  "tray-icon",
  "url",
+ "webkit2gtk",
+ "webview2-com",
  "window-vibrancy",
  "windows",
 ]
@@ -9861,6 +9864,37 @@ dependencies = [
 ]
 
 [[package]]
+name = "tauri-plugin"
+version = "2.7.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "67fb21a77e8f94e8beb3325e583102488659365af0a3948b7ea244c5b779c291"
+dependencies = [
+ "anyhow",
+ "glob",
+ "plist",
+ "schemars 0.8.22",
+ "serde",
+ "serde_json",
+ "tauri-utils",
+ "walkdir",
+]
+
+[[package]]
+name = "tauri-plugin-clipboard-manager"
+version = "2.4.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "640d0789c9db02265a800fded60520df5a3baa4a1b5f40715b83d58842c24fcb"
+dependencies = [
+ "arboard",
+ "log",
+ "serde",
+ "serde_json",
+ "tauri",
+ "tauri-plugin",
+ "thiserror 2.0.21",
+]
+
+[[package]]
 name = "tauri-runtime"
 version = "2.12.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -9894,13 +9928,18 @@ dependencies = [
  "gdkx11",
  "gtk",
  "http",
+ "ipc-channel",
  "log",
+ "parking_lot",
  "raw-window-handle",
  "rustls",
+ "serde_json",
  "servo",
+ "servo-net-traits",
  "tao",
  "tauri-runtime",
  "tauri-utils",
+ "tokio",
  "url",
  "x11-dl",
 ]

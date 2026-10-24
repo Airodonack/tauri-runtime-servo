@@ -3,7 +3,7 @@
 //! implementation.
 
 use std::any::Any;
-use std::cell::Cell;
+use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
 use std::fmt;
 use std::rc::{Rc, Weak};
@@ -13,13 +13,14 @@ use std::sync::{Arc, Mutex};
 use euclid::Scale;
 use gtk::prelude::*;
 use servo::{
-    EmbedderControl, EmbedderControlId, LoadStatus, NavigationRequest, RenderingContext,
-    Theme as ServoTheme, WebView, WebViewBuilder, WebViewDelegate, WindowRenderingContext,
+    EmbedderControl, EmbedderControlId, JSValue, JavaScriptEvaluationError, LoadStatus,
+    NavigationRequest, RenderingContext, Theme as ServoTheme, UserContentManager, UserScript,
+    WebView, WebViewBuilder, WebViewDelegate, WindowRenderingContext,
 };
 use tao::platform::unix::WindowExtUnix;
 use tao::window::Window;
 use tauri_runtime::dpi::{PhysicalPosition, PhysicalSize, Position, Rect, Size};
-use tauri_runtime::webview::{PageLoadEvent, PendingWebview};
+use tauri_runtime::webview::{InitializationScript, PageLoadEvent, PendingWebview};
 use tauri_runtime::window::{WebviewEvent, WindowId};
 use tauri_runtime::{Cookie, Error, Result, UserEvent, WebviewDispatch, WebviewEventId};
 use tauri_utils::config::Color;
@@ -27,6 +28,7 @@ use url::Url;
 
 use crate::dialog::OpenDialogs;
 use crate::input;
+use crate::protocol::{SchemeHandlers, to_servo_url, to_tauri_url};
 use crate::runtime::{Context, Message, ServoRuntime, WebviewId};
 use crate::x11::ChildWindow;
 
@@ -67,6 +69,17 @@ pub struct ServoWebview {
     pub bounds: Cell<Bounds>,
     pub auto_resize: Cell<bool>,
     pub listeners: WebviewEventListeners,
+    /// Scripts evaluated before the first page has a document; run once its
+    /// `<head>` is parsed (wry holds them until the first load commits).
+    pub pending_evals: PendingEvals,
+    pub label: String,
+    pub schemes: SchemeHandlers,
+}
+
+impl Drop for ServoWebview {
+    fn drop(&mut self) {
+        self.schemes.remove_webview(self.webview.id(), &self.label);
+    }
 }
 
 impl ServoWebview {
@@ -83,6 +96,82 @@ impl ServoWebview {
     pub fn paint(&self) {
         self.webview.paint();
         self.rendering_context.present();
+    }
+
+    /// Evaluates a script now, or once the first page has a document.
+    pub fn evaluate(&self, script: String, callback: Option<EvalCallback>) {
+        if let Some(pending) = &mut *self.pending_evals.borrow_mut() {
+            pending.push((script, callback));
+            return;
+        }
+        evaluate(&self.webview, script, callback);
+    }
+}
+
+/// What `eval_script_with_callback` gets back: the result as JSON.
+pub type EvalCallback = Box<dyn Fn(String) + Send>;
+pub type PendingEvals = Rc<RefCell<Option<Vec<(String, Option<EvalCallback>)>>>>;
+
+fn evaluate(webview: &WebView, script: String, callback: Option<EvalCallback>) {
+    webview.evaluate_javascript(script, move |result| match (result, callback) {
+        (Ok(value), Some(callback)) => callback(js_value_to_json(&value)),
+        (Ok(_), None) => {}
+        (Err(error), callback) => {
+            let error = describe_eval_error(&error);
+            log::warn!("eval_script failed: {error}");
+            if let Some(callback) = callback {
+                callback(error);
+            }
+        }
+    });
+}
+
+fn describe_eval_error(error: &JavaScriptEvaluationError) -> String {
+    match error {
+        JavaScriptEvaluationError::EvaluationFailure(Some(info)) => {
+            format!(
+                "error: {} ({}:{})",
+                info.message, info.filename, info.line_number
+            )
+        }
+        other => format!("error: {other:?}"),
+    }
+}
+
+/// The result of a script the way wry hands it over: `JSON.stringify` of
+/// the value (a string comes back quoted), and an empty string for
+/// `undefined`, which has no JSON.
+pub fn js_value_to_json(value: &JSValue) -> String {
+    match value {
+        JSValue::Undefined => String::new(),
+        value => to_json(value).to_string(),
+    }
+}
+
+fn to_json(value: &JSValue) -> serde_json::Value {
+    use serde_json::Value;
+    match value {
+        JSValue::Undefined | JSValue::Null => Value::Null,
+        JSValue::Boolean(b) => Value::Bool(*b),
+        // As JSON.stringify: integers without a fraction, NaN and the
+        // infinities as null.
+        JSValue::Number(n) if n.fract() == 0.0 && n.abs() < 9_007_199_254_740_992.0 => {
+            Value::from(*n as i64)
+        }
+        JSValue::Number(n) => serde_json::Number::from_f64(*n).map_or(Value::Null, Value::Number),
+        JSValue::String(s) => Value::String(s.clone()),
+        // JSON.stringify gives `{}` for nodes and windows.
+        JSValue::Element(_) | JSValue::ShadowRoot(_) | JSValue::Frame(_) | JSValue::Window(_) => {
+            Value::Object(Default::default())
+        }
+        JSValue::Array(items) => Value::Array(items.iter().map(to_json).collect()),
+        JSValue::Object(map) => Value::Object(
+            map.iter()
+                // JSON.stringify leaves out undefined members.
+                .filter(|(_, v)| !matches!(v, JSValue::Undefined))
+                .map(|(k, v)| (k.clone(), to_json(v)))
+                .collect(),
+        ),
     }
 }
 
@@ -112,6 +201,8 @@ struct Delegate {
     on_page_load: Option<Box<OnPageLoadHandler>>,
     navigation_handler: Option<Box<NavigationHandler>>,
     document_title_changed: Option<Box<DocumentTitleChangedHandler>>,
+    pending_evals: PendingEvals,
+    schemes: SchemeHandlers,
 }
 
 // tauri-runtime's names for these; its own aliases are private.
@@ -130,10 +221,17 @@ impl WebViewDelegate for Delegate {
         let event = match status {
             LoadStatus::Started => PageLoadEvent::Started,
             LoadStatus::Complete => PageLoadEvent::Finished,
-            _ => return,
+            LoadStatus::HeadParsed => {
+                // The document exists and the initialization scripts have run.
+                let pending = self.pending_evals.borrow_mut().take();
+                for (script, callback) in pending.into_iter().flatten() {
+                    evaluate(&webview, script, callback);
+                }
+                return;
+            }
         };
         if let (Some(handler), Some(url)) = (&self.on_page_load, webview.url()) {
-            handler(url, event);
+            handler(to_tauri_url(url), event);
         }
     }
 
@@ -145,9 +243,13 @@ impl WebViewDelegate for Delegate {
 
     fn request_navigation(&self, _webview: WebView, request: NavigationRequest) {
         match &self.navigation_handler {
-            Some(handler) if !handler(&request.url) => request.deny(),
+            Some(handler) if !handler(&to_tauri_url(request.url.clone())) => request.deny(),
             _ => request.allow(),
         }
+    }
+
+    fn load_web_resource(&self, webview: WebView, load: servo::WebResourceLoad) {
+        self.schemes.intercept(webview.id(), load);
     }
 
     fn show_embedder_control(&self, _webview: WebView, control: EmbedderControl) {
@@ -247,26 +349,27 @@ pub fn create_webview<T: UserEvent>(
         ..
     } = pending;
 
-    // What T3 wires; said once per webview so a page that needs it explains itself.
-    if !uri_scheme_protocols.is_empty() {
-        let mut schemes: Vec<_> = uri_scheme_protocols.keys().cloned().collect();
-        schemes.sort();
-        log::warn!(
-            "webview {label}: custom URI schemes not registered yet: {}",
-            schemes.join(", ")
-        );
-    }
-    if !attributes.initialization_scripts.is_empty() {
-        log::warn!(
-            "webview {label}: {} initialization scripts not injected yet",
-            attributes.initialization_scripts.len()
-        );
-    }
-    if ipc_handler.is_some() {
-        log::warn!("webview {label}: the IPC (postMessage) handler is not wired yet");
-    }
+    // Before Servo is built (at the first webview): its protocol registry
+    // is made from the schemes known then.
+    let mut schemes: Vec<_> = uri_scheme_protocols.keys().cloned().collect();
+    schemes.sort();
+    log::debug!("webview {label}: URI schemes {}", schemes.join(", "));
+    context.schemes.add_webview(&label, uri_scheme_protocols);
 
-    let url = Url::parse(&url).map_err(|e| Error::CreateWebview(Box::new(e)))?;
+    let mut initialization_scripts = attributes.initialization_scripts;
+    // Tauri's IPC goes through the `ipc` scheme, which always answers; its
+    // `window.ipc.postMessage` fallback (taken only after a failed fetch)
+    // has no Servo equivalent, so it says so on the page's console.
+    if ipc_handler.is_some() {
+        log::debug!("webview {label}: the postMessage IPC path is a logged no-op");
+        initialization_scripts.push(InitializationScript {
+            script: POST_MESSAGE_STUB.to_owned(),
+            for_main_frame_only: true,
+        });
+    }
+    drop(ipc_handler);
+
+    let url = to_servo_url(Url::parse(&url).map_err(|e| Error::CreateWebview(Box::new(e)))?);
     let scale_factor = window.scale_factor();
     let inner_size = window.inner_size();
     let bounds = match (kind, attributes.bounds) {
@@ -310,19 +413,28 @@ pub fn create_webview<T: UserEvent>(
         Error::CreateWebview(format!("rendering context not current: {e:?}").into())
     })?;
 
+    let pending_evals: PendingEvals = Rc::new(RefCell::new(Some(Vec::new())));
     let delegate = Rc::new(Delegate {
         window: Rc::downgrade(window),
         dialogs: Default::default(),
         on_page_load: on_page_load_handler,
         navigation_handler,
         document_title_changed: document_title_changed_handler,
+        pending_evals: pending_evals.clone(),
+        schemes: context.schemes.clone(),
     });
     let servo = context.servo();
+    let user_content = Rc::new(UserContentManager::new(&servo));
+    for script in initialization_scripts {
+        user_content.add_script(Rc::new(UserScript::new(user_script(script), None)));
+    }
     let webview = WebViewBuilder::new(&servo, rendering_context.clone())
         .url(url)
+        .user_content_manager(user_content)
         .hidpi_scale_factor(Scale::new(scale_factor as f32))
         .delegate(delegate)
         .build();
+    context.schemes.set_webview_id(webview.id(), &label);
     if attributes.focus {
         webview.set_focused(true);
     }
@@ -338,6 +450,9 @@ pub fn create_webview<T: UserEvent>(
         bounds: Cell::new(bounds),
         auto_resize: Cell::new(attributes.auto_resize),
         listeners: Default::default(),
+        pending_evals,
+        label: label.clone(),
+        schemes: context.schemes.clone(),
     });
     let weak = Rc::downgrade(&inner);
     input::connect_discrete_scroll(gtk_window, move || {
@@ -346,6 +461,32 @@ pub fn create_webview<T: UserEvent>(
         Some((inner.webview.clone(), (b.x, b.y, b.width, b.height)))
     });
     Ok(WebviewWrapper { label, id, inner })
+}
+
+/// Replaces wry's `window.ipc.postMessage`, which Tauri uses only when its
+/// `ipc://` fetch fails.
+const POST_MESSAGE_STUB: &str = r#"
+if (!window.ipc) {
+  Object.defineProperty(window, 'ipc', {
+    value: Object.freeze({
+      postMessage() {
+        console.error('Tauri IPC: the postMessage fallback is not available on Servo; the ipc:// request failed');
+      },
+    }),
+  });
+}
+"#;
+
+/// Servo runs user scripts in every frame; a main-frame-only one is
+/// wrapped in a check. A block keeps `var` and function declarations
+/// global but would scope a top-level `let`, `const` or `class` to it
+/// (Tauri's own scripts and its plugins' declare with `var`).
+fn user_script(script: InitializationScript) -> String {
+    if script.for_main_frame_only {
+        format!("if (window.top === window) {{\n{}\n}}", script.script)
+    } else {
+        script.script
+    }
 }
 
 pub fn to_servo_theme(theme: tao::window::Theme) -> Option<ServoTheme> {
@@ -360,7 +501,7 @@ pub fn to_servo_theme(theme: tao::window::Theme) -> Option<ServoTheme> {
 
 pub enum WebviewMessage {
     AddEventListener(WebviewEventId, WebviewEventHandler),
-    EvaluateScript(String),
+    EvaluateScript(String, Option<EvalCallback>),
     Navigate(Url),
     Reload,
     Close,
@@ -418,14 +559,8 @@ pub fn handle_webview_message<T: UserEvent>(
         WebviewMessage::AddEventListener(id, listener) => {
             webview.listeners.lock().unwrap().insert(id, listener);
         }
-        WebviewMessage::EvaluateScript(script) => {
-            webview.webview.evaluate_javascript(script, |result| {
-                if let Err(error) = result {
-                    log::warn!("eval_script failed: {error:?}");
-                }
-            });
-        }
-        WebviewMessage::Navigate(url) => webview.webview.load(url),
+        WebviewMessage::EvaluateScript(script, callback) => webview.evaluate(script, callback),
+        WebviewMessage::Navigate(url) => webview.webview.load(to_servo_url(url)),
         WebviewMessage::Reload => webview.webview.reload(),
         WebviewMessage::Close => {} // handled above
         WebviewMessage::Show => {
@@ -469,7 +604,7 @@ pub fn handle_webview_message<T: UserEvent>(
             let _ = tx.send(Ok(webview
                 .webview
                 .url()
-                .map(|url| url.to_string())
+                .map(|url| to_tauri_url(url).to_string())
                 .unwrap_or_default()));
         }
         WebviewMessage::Bounds(tx) => {
@@ -609,16 +744,21 @@ impl<T: UserEvent> WebviewDispatch<T> for ServoWebviewDispatcher<T> {
     }
 
     fn eval_script<S: Into<String>>(&self, script: S) -> Result<()> {
-        self.send(WebviewMessage::EvaluateScript(script.into()))
+        self.send(WebviewMessage::EvaluateScript(script.into(), None))
     }
 
+    /// The callback gets the result as JSON, as from wry; if the script
+    /// throws or cannot run, a text starting with `error:` (wry gives an
+    /// empty string), and the error is logged.
     fn eval_script_with_callback<S: Into<String>>(
         &self,
-        _script: S,
-        _callback: impl Fn(String) + Send + 'static,
+        script: S,
+        callback: impl Fn(String) + Send + 'static,
     ) -> Result<()> {
-        // Needs Servo's JSValue serialized as wry does (JSON); T3.
-        Err(unsupported("eval_script_with_callback"))
+        self.send(WebviewMessage::EvaluateScript(
+            script.into(),
+            Some(Box::new(callback)),
+        ))
     }
 
     fn reparent(&self, _window_id: WindowId) -> Result<()> {
