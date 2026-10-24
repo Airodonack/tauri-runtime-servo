@@ -1,0 +1,15 @@
+[package]
+name = "helloworld"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+# Tauri core without wry: the runtime is tauri-runtime-servo.
+tauri = { version = "=2.12.3", default-features = false, features = ["compression", "common-controls-v6", "dynamic-acl", "x11", "dbus"] }
+tauri-runtime-servo = { path = "../.." }
+env_logger = "0.11"
+log = "0.4"
