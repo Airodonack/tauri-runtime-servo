@@ -22,6 +22,13 @@
 //! (see `protocol`), the initialization scripts are Servo user scripts, and
 //! `eval` returns its result as JSON.
 //!
+//! For end-to-end tests, a build with the `webdriver` feature starts Servo's
+//! WebDriver server when `TAURI_RUNTIME_SERVO_WEBDRIVER_PORT` names a port
+//! ([`WEBDRIVER_PORT_VARIABLE`]): a test client talks W3C WebDriver to the
+//! app on that port directly (no tauri-driver). The page's dialogs are its
+//! user prompts. The server listens on every interface and runs any script
+//! it is sent, so the feature is for test builds only.
+//!
 //! Status: Linux on X11 only; the webview operations Servo cannot do yet
 //! return [`tauri_runtime::Error`]s.
 
@@ -33,11 +40,13 @@ mod input;
 mod monitor;
 mod protocol;
 mod runtime;
+mod webdriver;
 mod webview;
 mod window;
 mod x11;
 
 pub use runtime::{EventProxy, Message, ServoRuntime, ServoRuntimeHandle};
+pub use webdriver::PORT_VARIABLE as WEBDRIVER_PORT_VARIABLE;
 pub use webview::{ServoWebviewDispatcher, WebviewMessage};
 pub use window::{ServoWindowDispatcher, WindowBuilderWrapper, WindowMessage};
 

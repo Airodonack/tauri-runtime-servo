@@ -42,6 +42,11 @@ ipc-channel = "0.23"
 parking_lot = "0.12"
 tokio = { version = "1", default-features = false, features = ["sync"] }
 serde_json = "1"
+# Servo's WebDriver server, for end-to-end tests (the `webdriver` feature):
+# not part of libservo, so the embedder starts it and answers its commands.
+webdriver_server = { package = "servo-webdriver-server", path = "../../servo/components/webdriver_server", optional = true }
+# The channel the server's commands arrive on (the type in Servo's API).
+crossbeam-channel = "0.5"
 
 [target.'cfg(target_os = "linux")'.dependencies]
 gtk = { version = "0.18.2", features = ["v3_24"] }
@@ -52,3 +57,7 @@ x11-dl = "2.21"
 # Mirrors tauri-runtime's: the devtools methods exist on the trait in debug
 # builds and with this feature.
 devtools = ["tauri-runtime/devtools"]
+# Servo's WebDriver server, started when TAURI_RUNTIME_SERVO_WEBDRIVER_PORT
+# names a port. Test builds only: it listens on every interface and runs
+# any script it is sent.
+webdriver = ["dep:webdriver_server"]

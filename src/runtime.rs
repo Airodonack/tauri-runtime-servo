@@ -44,6 +44,7 @@ use tauri_utils::Theme;
 use crate::input;
 use crate::monitor::to_monitor;
 use crate::protocol::{MainThreadPoster, SchemeHandlers};
+use crate::webdriver::WebDriver;
 use crate::webview::{
     Bounds, ServoWebviewDispatcher, WebviewKind, WebviewMessage, WebviewWrapper, create_webview,
     handle_webview_message, to_servo_theme,
@@ -83,7 +84,9 @@ pub struct MainThreadContext<T: UserEvent> {
     pub windows: WindowsStore,
     /// Built at the first webview (Servo needs its protocol registry at
     /// build time, and Tauri hands the schemes over with the webview).
-    servo: RefCell<Option<Servo>>,
+    pub(crate) servo: RefCell<Option<Servo>>,
+    /// The WebDriver server's commands and pending replies (`webdriver`).
+    pub(crate) webdriver: Rc<WebDriver>,
 }
 
 /// The runtime's shared handle: what every dispatcher holds.
@@ -165,6 +168,9 @@ impl<T: UserEvent> Context<T> {
         }
         let preferences = Preferences {
             dom_media_source_enabled: true,
+            // Off by default in Servo (experimental); SvelteKit's link
+            // preloader throws without it.
+            dom_intersection_observer_enabled: true,
             ..Default::default()
         };
         let config_dir = data_directory
@@ -191,12 +197,23 @@ impl<T: UserEvent> Context<T> {
                 log::debug!("a URI scheme request arrived after the event loop ended");
             }
         });
+        let webdriver_preferences = preferences.clone();
         let servo = ServoBuilder::default()
             .opts(opts)
             .preferences(preferences)
             .protocol_registry(self.schemes.registry(post))
             .event_loop_waker(Box::new(Waker(self.proxy.clone())))
             .build();
+        // After the build: the server reads Servo's options, which the
+        // build sets once for the process (read first, they'd be defaults
+        // and the build would panic).
+        if let Some(port) = crate::webdriver::port_from_env() {
+            self.main_thread.webdriver.start(
+                port,
+                Box::new(Waker(self.proxy.clone())),
+                webdriver_preferences,
+            );
+        }
         *self.main_thread.servo.borrow_mut() = Some(servo.clone());
         servo
     }
@@ -205,6 +222,7 @@ impl<T: UserEvent> Context<T> {
     fn spin_servo(&self) {
         // Cloned out first: Servo calls the delegates, which may reach the
         // runtime again.
+        self.handle_webdriver_messages();
         let servo = self.main_thread.servo.borrow().clone();
         if let Some(servo) = servo {
             servo.spin_event_loop();
@@ -775,6 +793,7 @@ impl<T: UserEvent> ServoRuntime<T> {
             window_target: (*event_loop).clone(),
             windows: WindowsStore(RefCell::new(BTreeMap::new())),
             servo: RefCell::new(None),
+            webdriver: Default::default(),
         });
         let context = Context {
             window_id_map: WindowIdStore::default(),
