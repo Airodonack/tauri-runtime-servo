@@ -42,6 +42,7 @@ use tauri_utils::Theme;
 
 use crate::input;
 use crate::monitor::to_monitor;
+use crate::protocol::{MainThreadPoster, SchemeHandlers};
 use crate::webview::{
     Bounds, ServoWebviewDispatcher, WebviewKind, WebviewMessage, WebviewWrapper, create_webview,
     handle_webview_message, to_servo_theme,
@@ -93,6 +94,8 @@ pub struct Context<T: UserEvent> {
     /// Behind an `Arc` so a clone or drop on another thread only touches an
     /// atomic count; the contents are used on the main thread only.
     pub(crate) main_thread: Arc<MainThreadContext<T>>,
+    /// Tauri's URI scheme handlers, which Servo's protocol handlers reach.
+    pub(crate) schemes: SchemeHandlers,
     next_window_id: Arc<AtomicU32>,
     next_webview_id: Arc<AtomicU32>,
     next_window_event_id: Arc<AtomicU32>,
@@ -151,8 +154,17 @@ impl<T: UserEvent> Context<T> {
             dom_media_source_enabled: true,
             ..Default::default()
         };
+        // Through the proxy even from the main thread: a forwarder runs on
+        // Servo's network threads, and the handler must not run inside them.
+        let proxy = self.proxy.clone();
+        let post: MainThreadPoster = Arc::new(move |task| {
+            if proxy.send_event(Message::Task(task)).is_err() {
+                log::debug!("a URI scheme request arrived after the event loop ended");
+            }
+        });
         let servo = ServoBuilder::default()
             .preferences(preferences)
+            .protocol_registry(self.schemes.registry(post))
             .event_loop_waker(Box::new(Waker(self.proxy.clone())))
             .build();
         *self.main_thread.servo.borrow_mut() = Some(servo.clone());
@@ -726,6 +738,7 @@ impl<T: UserEvent> ServoRuntime<T> {
             main_thread_id: current_thread().id(),
             proxy: event_loop.create_proxy(),
             main_thread,
+            schemes: SchemeHandlers::default(),
             next_window_id: Default::default(),
             next_webview_id: Default::default(),
             next_window_event_id: Default::default(),

@@ -17,9 +17,13 @@
 //! The Commons Conservancy, Apache-2.0 OR MIT. The input conversion follows
 //! servoshell's (MPL-2.0).
 //!
-//! Status: a skeleton. Linux on X11 only; custom URI schemes (and with them
-//! Tauri's IPC), initialization scripts and the remaining webview operations
-//! return [`tauri_runtime::Error`]s until they are wired.
+//! Tauri's IPC works as on wry: the custom URI schemes (`ipc`, `tauri`,
+//! `asset`, the plugins') are Servo protocol handlers forwarding to Tauri's
+//! (see `protocol`), the initialization scripts are Servo user scripts, and
+//! `eval` returns its result as JSON.
+//!
+//! Status: Linux on X11 only; the webview operations Servo cannot do yet
+//! return [`tauri_runtime::Error`]s.
 
 #[cfg(not(target_os = "linux"))]
 compile_error!("tauri-runtime-servo supports Linux (X11) only for now");
@@ -27,6 +31,7 @@ compile_error!("tauri-runtime-servo supports Linux (X11) only for now");
 mod dialog;
 mod input;
 mod monitor;
+mod protocol;
 mod runtime;
 mod webview;
 mod window;

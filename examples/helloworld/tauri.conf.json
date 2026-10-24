@@ -4,7 +4,8 @@
   "version": "0.1.0",
   "identifier": "dev.tauri-runtime-servo.helloworld",
   "build": {
-    "frontendDist": "ui"
+    "frontendDist": "ui",
+    "devUrl": "http://127.0.0.1:47123"
   },
   "app": {
     "windows": [
@@ -20,9 +21,12 @@
     ],
     "security": {
       "csp": null
-    }
+    },
+    "withGlobalTauri": true
   },
   "bundle": {
-    "icon": ["icons/icon.png"]
+    "icon": [
+      "icons/icon.png"
+    ]
   }
 }

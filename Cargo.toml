@@ -35,6 +35,13 @@ servo = { path = "../../servo/components/servo", default-features = false, featu
     "media-gstreamer",
 ] }
 rustls = { version = "0.23", default-features = false, features = ["aws-lc-rs"] }
+# What a protocol handler needs to read a request body: libservo hands over
+# net's `Request`, whose body arrives over Servo's IPC channels.
+net_traits = { package = "servo-net-traits", path = "../../servo/components/shared/net" }
+ipc-channel = "0.23"
+parking_lot = "0.12"
+tokio = { version = "1", default-features = false, features = ["sync"] }
+serde_json = "1"
 
 [target.'cfg(target_os = "linux")'.dependencies]
 gtk = { version = "0.18.2", features = ["v3_24"] }

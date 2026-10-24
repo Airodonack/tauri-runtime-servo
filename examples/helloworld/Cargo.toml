@@ -12,4 +12,11 @@ tauri-build = { version = "2", features = [] }
 tauri = { version = "=2.12.3", default-features = false, features = ["compression", "common-controls-v6", "dynamic-acl", "x11", "dbus"] }
 tauri-runtime-servo = { path = "../.." }
 env_logger = "0.11"
+# A plugin with JavaScript API and permissions, at VODscribe's version.
+tauri-plugin-clipboard-manager = "=2.4.2"
 log = "0.4"
+
+[features]
+# Tauri's production mode: the page is embedded from ui/ and served on the
+# app's own `tauri://localhost` instead of the loopback server.
+custom-protocol = ["tauri/custom-protocol"]

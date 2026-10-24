@@ -4,25 +4,44 @@
 <meta charset="utf-8">
 <title>Hello from Servo</title>
 <style>
-  body { margin: 0; font: 18px/1.4 sans-serif; background: #f4f1ea; color: #222; }
-  header { padding: 16px 24px; background: #2b5797; color: #fff; }
-  h1 { margin: 0; font-size: 28px; }
-  main { padding: 16px 24px; }
-  #status, #answer { font-size: 22px; font-weight: bold; color: #b03a2e; }
-  button { font-size: 20px; padding: 8px 20px; }
-  #list { height: 300px; overflow-y: auto; border: 2px solid #2b5797; background: #fff; margin-top: 16px; }
-  #list li { padding: 6px 12px; border-bottom: 1px solid #ddd; }
+  body { margin: 0; font: 17px/1.4 sans-serif; background: #f4f1ea; color: #222; }
+  header { padding: 12px 24px; background: #2b5797; color: #fff; }
+  h1 { margin: 0; font-size: 26px; }
+  main { padding: 8px 24px; }
+  #status, #answer { font-weight: bold; color: #b03a2e; }
+  button { font-size: 18px; padding: 6px 16px; }
+  #ipc { margin: 8px 0; padding: 0; list-style: none; }
+  #ipc li { padding: 3px 0; border-bottom: 1px solid #ddd; }
+  #ipc b { display: inline-block; min-width: 9em; }
+  #list { height: 120px; overflow-y: auto; border: 2px solid #2b5797; background: #fff; margin-top: 8px; }
+  #list li { padding: 4px 12px; border-bottom: 1px solid #ddd; }
 </style>
 </head>
 <body>
 <header><h1>Tauri on Servo</h1></header>
 <main>
-  <p>This page is drawn by Servo inside a Tauri window.</p>
-  <p><button id="button">Click me</button> <span id="status">Not clicked yet</span></p>
-  <p><button id="ask">Ask</button> <span id="answer">No answer yet</span></p>
+  <p><button id="button">Click me</button> <span id="status">Not clicked yet</span>
+     <button id="ask">Ask</button> <span id="answer">No answer yet</span></p>
+  <ul id="ipc">
+    <li><b>greet</b> <span id="r-greet">waiting</span></li>
+    <li><b>async command</b> <span id="r-async">waiting</span></li>
+    <li><b>failing command</b> <span id="r-fail">waiting</span></li>
+    <li><b>raw bytes</b> <span id="r-raw">waiting</span></li>
+    <li><b>8 MB raw body</b> <span id="r-rawbig">waiting</span></li>
+    <li><b>clipboard plugin</b> <span id="r-clipboard">waiting</span></li>
+    <li><b>tick events</b> <span id="r-tick">waiting</span></li>
+  </ul>
   <ol id="list"></ol>
+  <!-- Tauri's scripts are main-frame-only: this frame must not get them. -->
+  <iframe style="display:none" srcdoc="<script>console.log('RESULT iframe __TAURI_INTERNALS__=' + typeof window.__TAURI_INTERNALS__)</script>"></iframe>
 </main>
 <script>
+  // RESULT lines go to the console, which the runtime logs.
+  function result(id, text) {
+    document.getElementById("r-" + id).textContent = text;
+    console.log("RESULT " + id + " " + text);
+  }
+
   const list = document.getElementById("list");
   for (let i = 1; i <= 100; i++) {
     const item = document.createElement("li");
@@ -42,14 +61,83 @@
   });
   let reported = 0;
   list.addEventListener("scroll", () => {
-    // One line per 100 px scrolled, so the log shows the wheel arrived.
     const step = Math.floor(list.scrollTop / 100);
     if (step !== reported) {
       reported = step;
       console.log("RESULT scrolled " + list.scrollTop);
     }
   });
-  console.log("RESULT loaded " + innerWidth + "x" + innerHeight);
+  console.log("RESULT loaded " + innerWidth + "x" + innerHeight + " origin " + location.origin);
+  console.log("RESULT globals isTauri=" + window.isTauri + " __TAURI__=" + typeof window.__TAURI__ +
+              " invoke=" + typeof (window.__TAURI__ && window.__TAURI__.core.invoke));
+
+  try {
+    const runs = Number(localStorage.getItem("runs") || 0) + 1;
+    localStorage.setItem("runs", String(runs));
+    console.log("RESULT localStorage runs=" + localStorage.getItem("runs"));
+  } catch (e) { console.log("RESULT localStorage error " + e); }
+
+  async function run() {
+    const { invoke } = window.__TAURI__.core;
+    const { listen } = window.__TAURI__.event;
+    const clipboard = window.__TAURI__.clipboardManager;
+
+    try {
+      result("greet", await invoke("greet", { name: "Servo" }));
+    } catch (e) { result("greet", "error " + e); }
+
+    try {
+      result("async", "2 + 40 = " + await invoke("add_later", { a: 2, b: 40 }));
+    } catch (e) { result("async", "error " + e); }
+
+    try {
+      await invoke("fail");
+      result("fail", "unexpectedly succeeded");
+    } catch (e) { result("fail", "rejected: " + e); }
+
+    try {
+      const sent = new Uint8Array([1, 2, 3, 4, 5]);
+      const answer = await invoke("reverse_bytes", sent.buffer, { headers: { "X-Probe": "hdr" } });
+      const bytes = new Uint8Array(answer);
+      result("raw", (answer instanceof ArrayBuffer ? "ArrayBuffer " : typeof answer + " ") +
+             Array.from(bytes.slice(0, 5)).join(",") + " + " +
+             new TextDecoder().decode(bytes.slice(5)));
+    } catch (e) { result("raw", "error " + e); }
+
+    try {
+      // A 1920x1080 RGBA frame, the size of VODscribe's overlay command.
+      const size = 1920 * 1080 * 4;
+      const sent = new Uint8Array(size);
+      for (let i = 0; i < size; i++) sent[i] = i & 255;
+      const start = performance.now();
+      const answer = new Uint8Array(await invoke("reverse_bytes", sent.buffer, { headers: { "X-Probe": "big" } }));
+      const ms = Math.round(performance.now() - start);
+      let same = answer.length === size + 3;
+      for (let i = 0; same && i < size; i += 4099) same = answer[i] === sent[size - 1 - i];
+      result("rawbig", (same ? "ok " : "mismatch ") + answer.length + " bytes back in " + ms + " ms, tail " +
+             new TextDecoder().decode(answer.slice(size)));
+    } catch (e) { result("rawbig", "error " + e); }
+
+    try {
+      const text = "copied through Tauri on Servo " + Date.now() % 1000;
+      await clipboard.writeText(text);
+      const back = await clipboard.readText();
+      result("clipboard", (back === text ? "round trip ok: " : "mismatch: ") + back);
+    } catch (e) { result("clipboard", "error " + e); }
+
+    let ticks = 0;
+    await listen("tick", (event) => {
+      ticks += 1;
+      if (ticks <= 3) result("tick", "event " + ticks + " payload " + event.payload);
+    });
+    console.log("RESULT listening for tick");
+    await invoke("page_ready");
+  }
+  if (window.__TAURI__) {
+    run().catch((e) => console.log("RESULT run failed " + e));
+  } else {
+    console.log("RESULT no __TAURI__ global: the initialization scripts did not run");
+  }
 </script>
 </body>
 </html>

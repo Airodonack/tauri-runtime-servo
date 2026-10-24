@@ -1,7 +1,13 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "The main window's permissions (IPC arrives with T3).",
-  "windows": ["main"],
-  "permissions": ["core:default"]
+  "description": "The main window's permissions: core, and the clipboard's text commands.",
+  "windows": [
+    "main"
+  ],
+  "permissions": [
+    "core:default",
+    "clipboard-manager:allow-write-text",
+    "clipboard-manager:allow-read-text"
+  ]
 }
