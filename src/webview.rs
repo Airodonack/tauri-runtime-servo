@@ -356,6 +356,7 @@ pub fn create_webview<T: UserEvent>(
     log::debug!("webview {label}: URI schemes {}", schemes.join(", "));
     context.schemes.add_webview(&label, uri_scheme_protocols);
 
+    let data_directory = attributes.data_directory;
     let mut initialization_scripts = attributes.initialization_scripts;
     // Tauri's IPC goes through the `ipc` scheme, which always answers; its
     // `window.ipc.postMessage` fallback (taken only after a failed fetch)
@@ -423,7 +424,7 @@ pub fn create_webview<T: UserEvent>(
         pending_evals: pending_evals.clone(),
         schemes: context.schemes.clone(),
     });
-    let servo = context.servo();
+    let servo = context.servo(data_directory.as_deref());
     let user_content = Rc::new(UserContentManager::new(&servo));
     for script in initialization_scripts {
         user_content.add_script(Rc::new(UserScript::new(user_script(script), None)));

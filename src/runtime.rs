@@ -13,6 +13,7 @@
 use std::cell::RefCell;
 use std::collections::{BTreeMap, HashMap};
 use std::fmt;
+use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::mpsc::{Sender, channel};
@@ -21,7 +22,7 @@ use std::thread::{ThreadId, current as current_thread};
 
 use euclid::Scale;
 use raw_window_handle::{DisplayHandle, HasDisplayHandle};
-use servo::{EventLoopWaker, Preferences, Servo, ServoBuilder};
+use servo::{EventLoopWaker, Opts, Preferences, Servo, ServoBuilder};
 use tao::event::{Event, StartCause, WindowEvent as TaoWindowEvent};
 use tao::event_loop::{
     ControlFlow, DeviceEventFilter as TaoDeviceEventFilter, EventLoop, EventLoopBuilder,
@@ -96,6 +97,9 @@ pub struct Context<T: UserEvent> {
     pub(crate) main_thread: Arc<MainThreadContext<T>>,
     /// Tauri's URI scheme handlers, which Servo's protocol handlers reach.
     pub(crate) schemes: SchemeHandlers,
+    /// Where Servo keeps its data when the first webview names no data
+    /// directory: the app's data folder, from its id.
+    default_data_dir: Option<PathBuf>,
     next_window_id: Arc<AtomicU32>,
     next_webview_id: Arc<AtomicU32>,
     next_window_event_id: Arc<AtomicU32>,
@@ -146,12 +150,37 @@ impl<T: UserEvent> Context<T> {
     }
 
     /// The one `Servo`, built on first use. Main thread only.
-    pub(crate) fn servo(&self) -> Servo {
+    ///
+    /// Servo keeps its client storage (localStorage, IndexedDB), cookies and
+    /// HSTS list in one directory for the whole process, so only the first
+    /// webview's `data_directory` counts; without one, the app's data folder.
+    /// With none at all Servo falls back to a temporary directory, which
+    /// its storage then fails to open.
+    pub(crate) fn servo(&self, data_directory: Option<&Path>) -> Servo {
         if let Some(servo) = &*self.main_thread.servo.borrow() {
+            if data_directory.is_some() {
+                log::debug!("Servo is built already: a later webview's data_directory is not used");
+            }
             return servo.clone();
         }
         let preferences = Preferences {
             dom_media_source_enabled: true,
+            ..Default::default()
+        };
+        let config_dir = data_directory
+            .map(Path::to_path_buf)
+            .or_else(|| self.default_data_dir.clone());
+        if let Some(dir) = &config_dir
+            && let Err(e) = std::fs::create_dir_all(dir)
+        {
+            log::error!(
+                "Servo's data directory {} can't be made: {e}",
+                dir.display()
+            );
+        }
+        log::debug!("Servo's data directory: {config_dir:?}");
+        let opts = Opts {
+            config_dir,
             ..Default::default()
         };
         // Through the proxy even from the main thread: a forwarder runs on
@@ -163,6 +192,7 @@ impl<T: UserEvent> Context<T> {
             }
         });
         let servo = ServoBuilder::default()
+            .opts(opts)
             .preferences(preferences)
             .protocol_registry(self.schemes.registry(post))
             .event_loop_waker(Box::new(Waker(self.proxy.clone())))
@@ -697,6 +727,18 @@ impl<T: UserEvent> EventLoopProxy<T> for EventProxy<T> {
     }
 }
 
+/// The app's data folder as Tauri's path resolver names it on Linux
+/// (`$XDG_DATA_HOME/<identifier>`), for when no webview gives one.
+fn app_data_dir(app_id: &str) -> Option<PathBuf> {
+    let base = std::env::var_os("XDG_DATA_HOME")
+        .filter(|d| !d.is_empty())
+        .map(PathBuf::from)
+        .or_else(|| {
+            std::env::var_os("HOME").map(|home| PathBuf::from(home).join(".local/share"))
+        })?;
+    Some(base.join(app_id))
+}
+
 /// A Tauri [`Runtime`] over libservo.
 pub struct ServoRuntime<T: UserEvent> {
     context: Context<T>,
@@ -721,6 +763,7 @@ impl<T: UserEvent> ServoRuntime<T> {
         // use aws-lc-rs. An error means one is installed already.
         let _ = rustls::crypto::aws_lc_rs::default_provider().install_default();
 
+        let default_data_dir = args.app_id.as_deref().and_then(app_data_dir);
         if let Some(app_id) = args.app_id {
             use tao::platform::unix::EventLoopBuilderExtUnix;
             event_loop_builder.with_app_id(app_id);
@@ -739,6 +782,7 @@ impl<T: UserEvent> ServoRuntime<T> {
             proxy: event_loop.create_proxy(),
             main_thread,
             schemes: SchemeHandlers::default(),
+            default_data_dir,
             next_window_id: Default::default(),
             next_webview_id: Default::default(),
             next_window_event_id: Default::default(),
