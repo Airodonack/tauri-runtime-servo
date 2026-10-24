@@ -1,0 +1,47 @@
+[workspace]
+resolver = "2"
+members = [".", "examples/helloworld"]
+
+[package]
+name = "tauri-runtime-servo"
+version = "0.1.0"
+edition = "2024"
+description = "A Tauri runtime over libservo, with tao windows"
+# The window, monitor and dispatcher plumbing is adapted from tauri-runtime-wry
+# (Apache-2.0 OR MIT); the input conversion follows servoshell (MPL-2.0). The
+# crate's own licence is the owner's to choose.
+license = "Apache-2.0 OR MIT"
+publish = false
+
+[dependencies]
+# The runtime trait is "not stable": exact pins, bumped together and deliberately.
+tauri-runtime = "=2.12.1"
+tauri-utils = "=2.10.2"
+tao = { version = "=0.37.1", default-features = false, features = ["rwh_06", "x11", "dbus"] }
+raw-window-handle = "0.6"
+dpi = "0.1"
+euclid = "0.22"
+http = "1"
+url = "2"
+log = "0.4"
+# The fork's libservo with servoshell's web features and the GStreamer media stack.
+servo = { path = "../../servo/components/servo", default-features = false, features = [
+    "bundled",
+    "clipboard",
+    "js_jit",
+    "multiprocess",
+    "default_web_features",
+    "gamepad",
+    "media-gstreamer",
+] }
+rustls = { version = "0.23", default-features = false, features = ["aws-lc-rs"] }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+gtk = { version = "0.18.2", features = ["v3_24"] }
+gdkx11 = "0.18.2"
+x11-dl = "2.21"
+
+[features]
+# Mirrors tauri-runtime's: the devtools methods exist on the trait in debug
+# builds and with this feature.
+devtools = ["tauri-runtime/devtools"]

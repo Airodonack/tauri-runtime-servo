@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Hello from Servo</title>
+<style>
+  body { margin: 0; font: 18px/1.4 sans-serif; background: #f4f1ea; color: #222; }
+  header { padding: 16px 24px; background: #2b5797; color: #fff; }
+  h1 { margin: 0; font-size: 28px; }
+  main { padding: 16px 24px; }
+  #status, #answer { font-size: 22px; font-weight: bold; color: #b03a2e; }
+  button { font-size: 20px; padding: 8px 20px; }
+  #list { height: 300px; overflow-y: auto; border: 2px solid #2b5797; background: #fff; margin-top: 16px; }
+  #list li { padding: 6px 12px; border-bottom: 1px solid #ddd; }
+</style>
+</head>
+<body>
+<header><h1>Tauri on Servo</h1></header>
+<main>
+  <p>This page is drawn by Servo inside a Tauri window.</p>
+  <p><button id="button">Click me</button> <span id="status">Not clicked yet</span></p>
+  <p><button id="ask">Ask</button> <span id="answer">No answer yet</span></p>
+  <ol id="list"></ol>
+</main>
+<script>
+  const list = document.getElementById("list");
+  for (let i = 1; i <= 100; i++) {
+    const item = document.createElement("li");
+    item.textContent = "List item " + i;
+    list.appendChild(item);
+  }
+  let clicks = 0;
+  document.getElementById("button").addEventListener("click", () => {
+    clicks += 1;
+    document.getElementById("status").textContent = "Clicked " + clicks + (clicks === 1 ? " time" : " times");
+    console.log("RESULT clicked " + clicks);
+  });
+  document.getElementById("ask").addEventListener("click", () => {
+    const ok = confirm("Do you like it here?");
+    document.getElementById("answer").textContent = ok ? "You said OK" : "You said Cancel";
+    console.log("RESULT confirm " + ok);
+  });
+  let reported = 0;
+  list.addEventListener("scroll", () => {
+    // One line per 100 px scrolled, so the log shows the wheel arrived.
+    const step = Math.floor(list.scrollTop / 100);
+    if (step !== reported) {
+      reported = step;
+      console.log("RESULT scrolled " + list.scrollTop);
+    }
+  });
+  console.log("RESULT loaded " + innerWidth + "x" + innerHeight);
+</script>
+</body>
+</html>

@@ -1,0 +1,28 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "helloworld",
+  "version": "0.1.0",
+  "identifier": "dev.tauri-runtime-servo.helloworld",
+  "build": {
+    "frontendDist": "ui"
+  },
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "Hello from Servo",
+        "width": 800,
+        "height": 600,
+        "minWidth": 400,
+        "minHeight": 300,
+        "create": false
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "icon": ["icons/icon.png"]
+  }
+}
