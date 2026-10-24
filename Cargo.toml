@@ -52,6 +52,8 @@ crossbeam-channel = "0.5"
 gtk = { version = "0.18.2", features = ["v3_24"] }
 gdkx11 = "0.18.2"
 x11-dl = "2.21"
+# To ask EGL which X visual its config names before the child window is made.
+khronos-egl = { version = "6", features = ["dynamic"] }
 
 [features]
 # Mirrors tauri-runtime's: the devtools methods exist on the trait in debug

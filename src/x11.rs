@@ -7,6 +7,12 @@
 //! drawing its toplevel, which X clips by its children, so the GL surface
 //! shows on top. This is the technique VODscribe's player uses for its own
 //! surface.
+//!
+//! The child's visual is the one named by the EGL config Servo's rendering
+//! context will use (see [`egl_visual`]): EGL refuses a window surface on a
+//! window whose visual differs from the config's native visual. Mesa lets it
+//! pass, NVIDIA does not, so with the screen's default 24-bit visual the
+//! surface failed on an NVIDIA desktop while every Xvfb run worked.
 
 use std::cell::RefCell;
 use std::ffi::{CString, c_ulong};
@@ -92,9 +98,21 @@ impl ChildWindow {
         unsafe {
             let display = connection.display;
             let screen = connection.screen;
-            // The screen's own opaque visual (GTK's toplevel may have an RGBA one).
-            let visual = (connection.xlib.XDefaultVisual)(display, screen);
-            let depth = (connection.xlib.XDefaultDepth)(display, screen);
+            // The visual of the EGL config the rendering context will use; the
+            // screen's default visual only if EGL cannot say.
+            let (visual, depth) = match egl_visual(&connection) {
+                Some((visual, depth, id)) => {
+                    log::info!("child window visual 0x{id:x}, depth {depth}, from the EGL config");
+                    (visual, depth)
+                }
+                None => {
+                    log::warn!("no EGL config visual; using the screen's default visual");
+                    (
+                        (connection.xlib.XDefaultVisual)(display, screen),
+                        (connection.xlib.XDefaultDepth)(display, screen),
+                    )
+                }
+            };
             let colormap =
                 (connection.xlib.XCreateColormap)(display, parent_xid, visual, xlib::AllocNone);
             let mut attributes: xlib::XSetWindowAttributes = std::mem::zeroed();
@@ -183,6 +201,99 @@ impl ChildWindow {
         let raw = RawWindowHandle::Xlib(XlibWindowHandle::new(self.window as c_ulong));
         // SAFETY: the window lives as long as `self`.
         unsafe { WindowHandle::borrow_raw(raw) }
+    }
+}
+
+/// The X visual named by the EGL config surfman will choose for Servo's
+/// window rendering context, with its depth and id.
+///
+/// Servo asks surfman for a context with alpha, depth and stencil
+/// (`WindowRenderingContext::new`), and surfman asks EGL for RGB 8, alpha 8,
+/// depth 24, stencil 8, a window surface and OpenGL, then takes the first
+/// config whose red, green and blue are exactly 8. The same request here, on
+/// the same X display, gives the same config, and its `EGL_NATIVE_VISUAL_ID`
+/// is the visual the child window must have.
+///
+/// The EGL display is initialized and left so: surfman gets the same display
+/// (EGL caches it per native display), and terminating it here would pull it
+/// from under surfman's contexts when a second webview is made.
+fn egl_visual(connection: &Connection) -> Option<(*mut xlib::Visual, i32, xlib::VisualID)> {
+    use khronos_egl as egl;
+    // EGL_KHR_platform_x11
+    const PLATFORM_X11_KHR: egl::Enum = 0x31D5;
+    // SAFETY: EGL on our own display; Xlib on our own connection.
+    unsafe {
+        let egl = match egl::DynamicInstance::<egl::EGL1_5>::load_required() {
+            Ok(egl) => egl,
+            Err(e) => {
+                log::warn!("EGL could not be loaded: {e}");
+                return None;
+            }
+        };
+        let display = egl
+            .get_platform_display(
+                PLATFORM_X11_KHR,
+                connection.display.cast(),
+                &[egl::ATTRIB_NONE],
+            )
+            .ok()?;
+        egl.initialize(display).ok()?;
+        let attributes = [
+            egl::RED_SIZE,
+            8,
+            egl::GREEN_SIZE,
+            8,
+            egl::BLUE_SIZE,
+            8,
+            egl::ALPHA_SIZE,
+            8,
+            egl::DEPTH_SIZE,
+            24,
+            egl::STENCIL_SIZE,
+            8,
+            egl::SURFACE_TYPE,
+            egl::WINDOW_BIT,
+            egl::RENDERABLE_TYPE,
+            egl::OPENGL_BIT,
+            egl::NONE,
+        ];
+        let count = egl.matching_config_count(display, &attributes).ok()?;
+        if count == 0 {
+            return None;
+        }
+        let mut configs = Vec::with_capacity(count);
+        egl.choose_config(display, &attributes, &mut configs).ok()?;
+        let config = configs.into_iter().find(|&config| {
+            [egl::RED_SIZE, egl::GREEN_SIZE, egl::BLUE_SIZE]
+                .iter()
+                .all(|&a| egl.get_config_attrib(display, config, a) == Ok(8))
+        })?;
+        let id = egl
+            .get_config_attrib(display, config, egl::NATIVE_VISUAL_ID)
+            .ok()? as xlib::VisualID;
+        if id == 0 {
+            return None;
+        }
+        let mut template: xlib::XVisualInfo = std::mem::zeroed();
+        template.visualid = id;
+        template.screen = connection.screen;
+        let mut found = 0;
+        let info = (connection.xlib.XGetVisualInfo)(
+            connection.display,
+            xlib::VisualIDMask | xlib::VisualScreenMask,
+            &mut template,
+            &mut found,
+        );
+        if info.is_null() {
+            return None;
+        }
+        let result = if found > 0 {
+            Some(((*info).visual, (*info).depth, id))
+        } else {
+            None
+        };
+        (connection.xlib.XFree)(info.cast());
+        result
     }
 }
 
