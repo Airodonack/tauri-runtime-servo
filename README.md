@@ -73,18 +73,17 @@ Does not work yet (each returns a `tauri_runtime::Error` or logs a warning):
 | Rust | 1.97.1 | the toolchain the Servo fork is built with (`rust-toolchain.toml`); `RUSTC_BOOTSTRAP` for mozjs, see below |
 | Tauri | 2.12 (`tauri` 2.12.3, `tauri-runtime` =2.12.1, `tauri-utils` =2.10.2) | the runtime traits are not semver-stable, so the pins are exact |
 | libservo | the [Airodonack/servo](https://github.com/Airodonack/servo) fork, branch `vodscribe/main` (Servo 0.7.0 + Media Source Extensions) | a path dependency for now, see [Using it](#using-it-in-a-tauri-app) |
-| Stylo | 0.22.0 plus the fork's style properties (branch `servo-scrollbars-0.22.0`) | patched in by every consumer, see below |
+| Stylo | 0.22.0 plus the fork's style properties (branch `vodscribe/v0.22.0` of [Airodonack/stylo](https://github.com/Airodonack/stylo), a git dependency) | patched in by every consumer, see below |
 | GStreamer | 1.24 or newer to build (`gstreamer-mse-1.0` is in gst-plugins-bad since 1.24); 1.28 recommended to run | media; the X11, EGL and GTK development packages are listed in [.github/workflows/check.yml](.github/workflows/check.yml) |
 | WebKitGTK 4.1 development files | build time only | `tauri` and `tauri-runtime` depend on `webkit2gtk` on Linux whatever the runtime; nothing of it is linked into the binary |
 
 ## Quick start
 
-The crate builds against sibling checkouts of the Servo fork and its Stylo branch (the layout below). The Stylo branch is not published yet, so for now this works only where you have it; that is the first thing to fix before the crate is usable by others. With Rust (rustup), clang, the packages from the table and room for Servo's build (tens of gigabytes):
+The crate builds against a sibling checkout of the Servo fork (the layout below); Stylo comes from its git source, so it needs no checkout. With Rust (rustup), clang, the packages from the table and room for Servo's build (tens of gigabytes):
 
 ```sh
 mkdir servo-work && cd servo-work
 git clone -b vodscribe/main https://github.com/Airodonack/servo servo
-git clone -b servo-scrollbars-0.22.0 <the Stylo fork, once published> stylo
 mkdir tauri-servo && git clone https://github.com/Airodonack/tauri-runtime-servo tauri-servo/tauri-runtime-servo
 cd tauri-servo/tauri-runtime-servo
 export CC=clang CXX=clang++   # mozjs is built with clang
@@ -103,21 +102,21 @@ tauri = { version = "=2.12.3", default-features = false, features = ["compressio
 tauri-runtime-servo = { path = "../tauri-servo/tauri-runtime-servo" }
 ```
 
-**2. The Stylo patch.** The fork's layout reads style properties (`scrollbar-width`, `scrollbar-color`, `scrollbar-gutter`, `accent-color`, `text-overflow`) that stock Stylo 0.22.0 leaves out of Servo's style structs, so the build needs the fork's Stylo branch. Cargo applies `[patch]` only from the workspace a build starts in, never from a dependency, so your app's root `Cargo.toml` needs the same block this repository's has (paths relative to your workspace). All eleven crates of Stylo's workspace are patched together: patching `stylo` alone builds two copies of the shared ones, which do not fit together.
+**2. The Stylo patch.** The fork's layout reads style properties (`scrollbar-width`, `scrollbar-color`, `scrollbar-gutter`, `accent-color`, `text-overflow`) that stock Stylo 0.22.0 leaves out of Servo's style structs, so the build needs the fork's Stylo branch (`vodscribe/v0.22.0` of [Airodonack/stylo](https://github.com/Airodonack/stylo), servo/stylo v0.22.0 plus three commits: the scrollbar properties, `text-overflow` and `accent-color` ungated for Servo, and a UA-only `-servo-accent-color` keyword). Cargo applies `[patch]` only from the workspace a build starts in, never from a dependency, so your app's root `Cargo.toml` needs the same block this repository's has. All eleven crates of Stylo's workspace are patched together: patching `stylo` alone builds two copies of the shared ones, which do not fit together.
 
 ```toml
 [patch.crates-io]
-selectors = { path = "../stylo/selectors" }
-servo_arc = { path = "../stylo/servo_arc" }
-stylo = { path = "../stylo/style" }
-stylo_atoms = { path = "../stylo/stylo_atoms" }
-stylo_derive = { path = "../stylo/style_derive" }
-stylo_dom = { path = "../stylo/stylo_dom" }
-stylo_malloc_size_of = { path = "../stylo/malloc_size_of" }
-stylo_static_prefs = { path = "../stylo/stylo_static_prefs" }
-stylo_traits = { path = "../stylo/style_traits" }
-to_shmem = { path = "../stylo/to_shmem" }
-to_shmem_derive = { path = "../stylo/to_shmem_derive" }
+selectors = { git = "https://github.com/Airodonack/stylo", rev = "b5c009c00c159d11d9c01f4c01957f4b2290b767" }
+servo_arc = { git = "https://github.com/Airodonack/stylo", rev = "b5c009c00c159d11d9c01f4c01957f4b2290b767" }
+stylo = { git = "https://github.com/Airodonack/stylo", rev = "b5c009c00c159d11d9c01f4c01957f4b2290b767" }
+stylo_atoms = { git = "https://github.com/Airodonack/stylo", rev = "b5c009c00c159d11d9c01f4c01957f4b2290b767" }
+stylo_derive = { git = "https://github.com/Airodonack/stylo", rev = "b5c009c00c159d11d9c01f4c01957f4b2290b767" }
+stylo_dom = { git = "https://github.com/Airodonack/stylo", rev = "b5c009c00c159d11d9c01f4c01957f4b2290b767" }
+stylo_malloc_size_of = { git = "https://github.com/Airodonack/stylo", rev = "b5c009c00c159d11d9c01f4c01957f4b2290b767" }
+stylo_static_prefs = { git = "https://github.com/Airodonack/stylo", rev = "b5c009c00c159d11d9c01f4c01957f4b2290b767" }
+stylo_traits = { git = "https://github.com/Airodonack/stylo", rev = "b5c009c00c159d11d9c01f4c01957f4b2290b767" }
+to_shmem = { git = "https://github.com/Airodonack/stylo", rev = "b5c009c00c159d11d9c01f4c01957f4b2290b767" }
+to_shmem_derive = { git = "https://github.com/Airodonack/stylo", rev = "b5c009c00c159d11d9c01f4c01957f4b2290b767" }
 ```
 
 Without it the build stops in `servo-layout` with ``no field `scrollbar_gutter` on type `&style::properties::style_structs::Box` ``.
@@ -171,7 +170,7 @@ fn main() {
 - One data directory per process: only the first webview's `data_directory` counts (Servo keeps one storage per process).
 - A URI scheme first registered after the first webview was made cannot be added (Servo's protocol registry is fixed when it is built); the runtime logs it.
 - Keys go to the window's first webview; pointer events to every webview under the pointer.
-- Dependencies are paths to sibling checkouts; publishing on crates.io waits on libservo being usable from crates.io with the fork's changes, or on git dependencies once the Stylo fork is public.
+- libservo is a path dependency on a sibling checkout of the Servo fork; Stylo is a git dependency. Publishing on crates.io waits on libservo being usable from crates.io with the fork's changes, or on git dependencies for the Servo fork too.
 
 Next, roughly in order: the embedder controls (`<select>`, file and colour pickers, context menus), the cookie API, Wayland, devtools through Servo's Firefox-remote server, then macOS and Windows.
 
