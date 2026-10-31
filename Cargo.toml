@@ -23,16 +23,22 @@ stylo_traits = { path = "../../stylo/style_traits" }
 to_shmem = { path = "../../stylo/to_shmem" }
 to_shmem_derive = { path = "../../stylo/to_shmem_derive" }
 
-
 [package]
 name = "tauri-runtime-servo"
 version = "0.1.0"
 edition = "2024"
-description = "A Tauri runtime over libservo, with tao windows"
+rust-version = "1.97"
+description = "A Tauri runtime that draws the app's windows with the Servo web engine instead of wry"
+repository = "https://github.com/Airodonack/tauri-runtime-servo"
+homepage = "https://github.com/Airodonack/tauri-runtime-servo"
+readme = "README.md"
+keywords = ["tauri", "servo", "runtime", "webview", "gui"]
+categories = ["gui", "web-programming"]
 # The window, monitor and dispatcher plumbing is adapted from tauri-runtime-wry
-# (Apache-2.0 OR MIT); the input conversion follows servoshell (MPL-2.0). The
-# crate's own licence is the owner's to choose.
+# (Apache-2.0 OR MIT, see NOTICE); the input conversion follows servoshell
+# (MPL-2.0).
 license = "Apache-2.0 OR MIT"
+# Not on crates.io yet: libservo and the Stylo branch are path dependencies.
 publish = false
 
 [dependencies]
