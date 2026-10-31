@@ -45,10 +45,13 @@ mod webview;
 mod window;
 mod x11;
 
-pub use runtime::{EventProxy, Message, ServoRuntime, ServoRuntimeHandle};
+// The runtime and the types its trait implementations name. The messages
+// between dispatchers and the event loop stay inside the crate: they are
+// how it works, not what it offers.
+pub use runtime::{EventProxy, ServoRuntime, ServoRuntimeHandle};
 pub use webdriver::PORT_VARIABLE as WEBDRIVER_PORT_VARIABLE;
-pub use webview::{ServoWebviewDispatcher, WebviewMessage};
-pub use window::{ServoWindowDispatcher, WindowBuilderWrapper, WindowMessage};
+pub use webview::ServoWebviewDispatcher;
+pub use window::{ServoWindowDispatcher, WindowBuilderWrapper};
 
 pub use servo;
 pub use tao;
