@@ -622,8 +622,11 @@ fn handle_window_event<T: UserEvent>(
         match &event {
             TaoWindowEvent::Resized(size) => {
                 for webview in &webviews {
-                    if webview.inner.kind == WebviewKind::WindowContent
-                        || webview.inner.auto_resize.get()
+                    // A page in the window's page area follows the area
+                    // (GTK lays it out after the resize); see `PageArea`.
+                    if webview.inner.page_area.is_none()
+                        && (webview.inner.kind == WebviewKind::WindowContent
+                            || webview.inner.auto_resize.get())
                     {
                         webview.inner.set_bounds(Bounds {
                             x: 0,

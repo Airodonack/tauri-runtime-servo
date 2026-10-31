@@ -74,7 +74,7 @@ jobs:
       # -p for each package: `--all` would format the path dependencies (the
       # whole Servo fork) in this workspace's style.
       - name: Formatting
-        run: cargo fmt -p tauri-runtime-servo -p helloworld -- --check
+        run: cargo fmt -p tauri-runtime-servo -p helloworld -p menubar -- --check
 
       # Everything in the release profile, so Servo is compiled once for the
       # tests and both builds of the example (a debug Servo is a second

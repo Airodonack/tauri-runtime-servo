@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Menu bar on Servo</title>
+<style>
+  /* A red band on the page's first rows: if anything covers the top of
+     the page, the band is what disappears. */
+  html, body { margin: 0; height: 100%; }
+  body { font: 17px/1.4 sans-serif; background: #f4f1ea; color: #222; box-sizing: border-box; border-top: 12px solid #c0392b; }
+  main { padding: 8px 24px; }
+  #click { font-weight: bold; color: #2b5797; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Page under a menu bar</h1>
+  <p>The red band above is the page's first 12 pixels; the window's menu bar sits above it, not over it.</p>
+  <p>Page size: <span id="size">?</span>. Last click: <span id="click">none yet</span>.</p>
+</main>
+<script>
+  // RESULT lines go to the console, which the runtime logs.
+  function size() {
+    const text = innerWidth + 'x' + innerHeight;
+    document.getElementById('size').textContent = text;
+    console.log('RESULT page size ' + text);
+  }
+  addEventListener('resize', size);
+  size();
+  // Where a click lands in the page: with the page below the menu bar, a
+  // click at the page's top-left corner reads 0,0 here.
+  addEventListener('click', (event) => {
+    const text = event.clientX + ',' + event.clientY;
+    document.getElementById('click').textContent = text;
+    console.log('RESULT page click at ' + text);
+  });
+</script>
+</body>
+</html>

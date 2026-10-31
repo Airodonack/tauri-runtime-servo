@@ -1,0 +1,28 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "menubar",
+  "version": "0.1.0",
+  "identifier": "dev.tauri-runtime-servo.menubar",
+  "build": {
+    "frontendDist": "ui"
+  },
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "Menu bar on Servo",
+        "width": 800,
+        "height": 600,
+        "create": false
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "icon": [
+      "../helloworld/icons/icon.png"
+    ]
+  }
+}

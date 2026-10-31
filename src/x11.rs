@@ -1,5 +1,6 @@
 //! The webview's native surface under X11: a child window of the tao
-//! window's toplevel, on an X connection of the runtime's own.
+//! window's toplevel, on an X connection of the runtime's own, and the
+//! [`PageArea`] of the window's GTK box that the window's page covers.
 //!
 //! The child takes no input (an empty input region), so the pointer and the
 //! wheel reach the GTK window under it and come back as tao events, which the
@@ -14,11 +15,12 @@
 //! pass, NVIDIA does not, so with the screen's default 24-bit visual the
 //! surface failed on an NVIDIA desktop while every Xvfb run worked.
 
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::ffi::{CString, c_ulong};
 use std::ptr::NonNull;
 use std::rc::Rc;
 
+use gtk::glib::SignalHandlerId;
 use gtk::prelude::*;
 use raw_window_handle::{
     DisplayHandle, RawDisplayHandle, RawWindowHandle, WindowHandle, XlibDisplayHandle,
@@ -212,6 +214,86 @@ impl ChildWindow {
         let raw = RawWindowHandle::Xlib(XlibWindowHandle::new(self.window as c_ulong));
         // SAFETY: the window lives as long as `self`.
         unsafe { WindowHandle::borrow_raw(raw) }
+    }
+}
+
+/// The part of the tao window's GTK box (`default_vbox`) that the window's
+/// page covers: an empty box packed to take all the room the box's other
+/// children leave. Tauri puts a window's menu bar in that GTK box (muda
+/// packs it first), so the page area starts below the bar, and GTK moves
+/// it whenever the window is resized or the bar is shown or hidden. The
+/// child window is placed on it rather than on the whole window, as wry
+/// packs its WebKitGTK widget into the same box.
+///
+/// Neither the box nor the GTK box has a GdkWindow of its own, so the
+/// allocation GTK gives the area is in the toplevel's coordinates, the ones
+/// the child window is placed in.
+pub struct PageArea {
+    area: gtk::Box,
+    allocated: Cell<Option<SignalHandlerId>>,
+}
+
+impl PageArea {
+    /// The page area of `window`, packed into its GTK box now. `None` for a
+    /// window made without a GTK box: its page covers the whole window.
+    pub fn new(window: &tao::window::Window) -> Option<PageArea> {
+        use tao::platform::unix::WindowExtUnix;
+        let vbox = window.default_vbox()?;
+        let area = gtk::Box::new(gtk::Orientation::Vertical, 0);
+        vbox.pack_start(&area, true, true, 0);
+        area.show();
+        Some(PageArea {
+            area,
+            allocated: Cell::new(None),
+        })
+    }
+
+    /// Where the area is, in physical pixels from the client area's
+    /// top-left corner: x, y, width, height. `None` until GTK has laid the
+    /// window out with it.
+    pub fn geometry(&self) -> Option<(i32, i32, u32, u32)> {
+        geometry(&self.area, &self.area.allocation())
+    }
+
+    /// Calls `moved` with the area's new geometry each time GTK lays it out
+    /// again. Called once: a second call replaces the first callback.
+    pub fn connect_moved(&self, moved: impl Fn((i32, i32, u32, u32)) + 'static) {
+        let id = self.area.connect_size_allocate(move |area, allocation| {
+            if let Some(geometry) = geometry(area, allocation) {
+                moved(geometry);
+            }
+        });
+        if let Some(old) = self.allocated.replace(Some(id)) {
+            self.area.disconnect(old);
+        }
+    }
+}
+
+/// An allocation in physical pixels; `None` for the 1x1 placeholder GTK
+/// gives a widget it has not laid out yet.
+fn geometry(area: &gtk::Box, allocation: &gtk::Allocation) -> Option<(i32, i32, u32, u32)> {
+    if allocation.x() < 0 || allocation.y() < 0 {
+        return None;
+    }
+    let scale = area.scale_factor();
+    Some((
+        allocation.x() * scale,
+        allocation.y() * scale,
+        (allocation.width() * scale) as u32,
+        (allocation.height() * scale) as u32,
+    ))
+}
+
+impl Drop for PageArea {
+    fn drop(&mut self) {
+        if let Some(id) = self.allocated.take() {
+            self.area.disconnect(id);
+        }
+        // The window keeps its GTK box; a page made in it later packs an
+        // area of its own.
+        if let Some(vbox) = self.area.parent().and_downcast::<gtk::Container>() {
+            vbox.remove(&self.area);
+        }
     }
 }
 

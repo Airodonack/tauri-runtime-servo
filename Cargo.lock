@@ -4832,6 +4832,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "menubar"
+version = "0.1.0"
+dependencies = [
+ "env_logger",
+ "gtk",
+ "log",
+ "tauri",
+ "tauri-build",
+ "tauri-runtime-servo",
+]
+
+[[package]]
 name = "mime"
 version = "0.3.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"

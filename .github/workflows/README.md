@@ -4,4 +4,4 @@ GitHub Actions runs these on every push to `main` and on every pull request. The
 
 | File | What it holds |
 |---|---|
-| `check.yml` | Formatting, clippy with warnings as errors (every feature), rustdoc with warnings as errors, the crate's tests under Xvfb, and the helloworld example's build in production mode, development mode and with WebDriver, on Ubuntu 24.04, all in the release profile so Servo is compiled once. |
+| `check.yml` | Formatting, clippy with warnings as errors (every feature, every example in the workspace), rustdoc with warnings as errors, the crate's tests under Xvfb, and the helloworld example's build in production mode, development mode and with WebDriver, on Ubuntu 24.04, all in the release profile so Servo is compiled once. |
