@@ -1,0 +1,18 @@
+tauri-runtime-servo
+Copyright 2026 Airodonack
+
+Licensed under the Apache License, Version 2.0 (LICENSE-APACHE) or the MIT
+licence (LICENSE-MIT), at your option.
+
+This crate adapts code from tauri-runtime-wry 2.12.1
+(https://github.com/tauri-apps/tauri, crates/tauri-runtime-wry): the
+dispatcher message enums, the main-thread context, the window builder, the
+window getters and setters, and the monitor conversion (src/runtime.rs,
+src/window.rs, src/monitor.rs). That code carries this notice:
+
+    Copyright 2019-2024 Tauri Programme within The Commons Conservancy
+    SPDX-License-Identifier: Apache-2.0
+    SPDX-License-Identifier: MIT
+
+and its MIT licence text reads "Copyright (c) 2017 - Present Tauri Apps
+Contributors".
