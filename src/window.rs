@@ -1131,25 +1131,12 @@ pub fn create_window<T: UserEvent, F: Fn(RawWindow) + Send + 'static>(
                 .to_physical::<u32>(scale_factor);
             let mut window_size = inner_size;
             if let Some(margin) = window_builder.prevent_overflow {
-                let work_area = crate::monitor::work_area(&monitor);
-                let margin = margin.to_physical::<u32>(scale_factor);
-                let constraint = PhysicalSize::new(
-                    work_area.size.width - margin.width,
-                    work_area.size.height - margin.height,
-                );
-                if window_size.width > constraint.width || window_size.height > constraint.height {
-                    if window_size.width > constraint.width {
-                        inner_size.width = inner_size
-                            .width
-                            .saturating_sub(window_size.width - constraint.width);
-                        window_size.width = constraint.width;
-                    }
-                    if window_size.height > constraint.height {
-                        inner_size.height = inner_size
-                            .height
-                            .saturating_sub(window_size.height - constraint.height);
-                        window_size.height = constraint.height;
-                    }
+                let work_area = crate::monitor::work_area(&monitor).size;
+                if let Some((fitted_inner, fitted_window)) =
+                    fit_in_work_area(inner_size, window_size, work_area, margin, scale_factor)
+                {
+                    inner_size = fitted_inner;
+                    window_size = fitted_window;
                     window_builder.inner.window.inner_size = Some(inner_size.into());
                 }
             }
@@ -1207,7 +1194,133 @@ pub fn create_window<T: UserEvent, F: Fn(RawWindow) + Send + 'static>(
     })
 }
 
+/// `prevent_overflow`: the window's inner and outer size shrunk to the
+/// monitor's work area less `margin` (physical or logical, at
+/// `scale_factor`), or `None` when the window fits already. As in
+/// tauri-runtime-wry, a margin larger than the work area is not checked.
+fn fit_in_work_area(
+    mut inner_size: PhysicalSize<u32>,
+    mut window_size: PhysicalSize<u32>,
+    work_area: PhysicalSize<u32>,
+    margin: Size,
+    scale_factor: f64,
+) -> Option<(PhysicalSize<u32>, PhysicalSize<u32>)> {
+    let margin = margin.to_physical::<u32>(scale_factor);
+    let constraint = PhysicalSize::new(
+        work_area.width - margin.width,
+        work_area.height - margin.height,
+    );
+    if window_size.width <= constraint.width && window_size.height <= constraint.height {
+        return None;
+    }
+    if window_size.width > constraint.width {
+        inner_size.width = inner_size
+            .width
+            .saturating_sub(window_size.width - constraint.width);
+        window_size.width = constraint.width;
+    }
+    if window_size.height > constraint.height {
+        inner_size.height = inner_size
+            .height
+            .saturating_sub(window_size.height - constraint.height);
+        window_size.height = constraint.height;
+    }
+    Some((inner_size, window_size))
+}
+
 /// Answers a getter. A dropped receiver means the caller gave up waiting.
 fn reply<V>(tx: &Sender<V>, value: V) {
     let _ = tx.send(value);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const WORK_AREA: PhysicalSize<u32> = PhysicalSize::new(1920, 1040);
+
+    fn size(width: u32, height: u32) -> PhysicalSize<u32> {
+        PhysicalSize::new(width, height)
+    }
+
+    fn no_margin() -> Size {
+        PhysicalSize::new(0, 0).into()
+    }
+
+    #[test]
+    fn a_window_that_fits_is_left_alone() {
+        let window = size(800, 600);
+        assert_eq!(
+            fit_in_work_area(window, window, WORK_AREA, no_margin(), 1.0),
+            None
+        );
+        // Exactly the work area's size fits too.
+        assert_eq!(
+            fit_in_work_area(WORK_AREA, WORK_AREA, WORK_AREA, no_margin(), 1.0),
+            None
+        );
+    }
+
+    #[test]
+    fn a_window_too_wide_is_narrowed_and_keeps_its_height() {
+        let window = size(2400, 600);
+        assert_eq!(
+            fit_in_work_area(window, window, WORK_AREA, no_margin(), 1.0),
+            Some((size(1920, 600), size(1920, 600)))
+        );
+    }
+
+    #[test]
+    fn a_window_too_large_both_ways_shrinks_both_ways() {
+        let window = size(3000, 2000);
+        assert_eq!(
+            fit_in_work_area(window, window, WORK_AREA, no_margin(), 1.0),
+            Some((WORK_AREA, WORK_AREA))
+        );
+    }
+
+    #[test]
+    fn decorations_come_off_the_inner_size() {
+        // An outer size 40 px taller than the inner one (a title bar).
+        assert_eq!(
+            fit_in_work_area(
+                size(800, 1100),
+                size(800, 1140),
+                WORK_AREA,
+                no_margin(),
+                1.0
+            ),
+            Some((size(800, 1000), size(800, 1040)))
+        );
+    }
+
+    #[test]
+    fn a_logical_margin_scales_with_the_monitor() {
+        let margin: Size = LogicalSize::new(100.0, 40.0).into();
+        let window = size(3000, 3000);
+        let fitted = |scale| {
+            fit_in_work_area(window, window, WORK_AREA, margin, scale).map(|(inner, _)| inner)
+        };
+        assert_eq!(fitted(1.0), Some(size(1820, 1000)));
+        assert_eq!(fitted(1.25), Some(size(1795, 990)));
+        assert_eq!(fitted(2.0), Some(size(1720, 960)));
+    }
+
+    #[test]
+    fn a_physical_margin_does_not_scale() {
+        let margin: Size = PhysicalSize::new(100, 40).into();
+        let window = size(3000, 3000);
+        assert_eq!(
+            fit_in_work_area(window, window, WORK_AREA, margin, 2.0),
+            Some((size(1820, 1000), size(1820, 1000)))
+        );
+    }
+
+    #[test]
+    fn a_zero_sized_window_always_fits() {
+        assert_eq!(
+            fit_in_work_area(size(0, 0), size(0, 0), WORK_AREA, no_margin(), 1.0),
+            None
+        );
+    }
 }
