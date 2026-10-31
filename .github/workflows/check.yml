@@ -1,0 +1,114 @@
+# Formatting, lints, tests and the example's build, on Ubuntu, headless.
+#
+# The crate depends on the Servo fork and its Stylo branch by path
+# (../../servo and ../../stylo from the crate), so the job checks the three
+# repositories out side by side in that layout. The Stylo branch is not on
+# GitHub yet: until it is, STYLO_REPOSITORY below has nothing to clone and
+# the job fails at checkout.
+name: check
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+env:
+  SERVO_REPOSITORY: Airodonack/servo
+  SERVO_REF: vodscribe/main
+  STYLO_REPOSITORY: Airodonack/stylo
+  STYLO_REF: servo-scrollbars-0.22.0
+  CARGO_TERM_COLOR: always
+  CC: clang
+  CXX: clang++
+
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    defaults:
+      run:
+        working-directory: tauri-servo/tauri-runtime-servo
+    steps:
+      - name: Check out the runtime
+        uses: actions/checkout@v4
+        with:
+          path: tauri-servo/tauri-runtime-servo
+      - name: Check out the Servo fork
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.SERVO_REPOSITORY }}
+          ref: ${{ env.SERVO_REF }}
+          path: servo
+          fetch-depth: 1
+      - name: Check out the Stylo branch
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.STYLO_REPOSITORY }}
+          ref: ${{ env.STYLO_REF }}
+          path: stylo
+          fetch-depth: 1
+
+      # Servo's build is large: make room on the runner first.
+      - name: Free disk space
+        working-directory: .
+        run: sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+
+      # Servo's own list (python/servo/platform/linux_packages/apt), plus
+      # GTK 3 for tao, WebKitGTK's development files (tauri and
+      # tauri-runtime depend on webkit2gtk on Linux whatever the runtime;
+      # nothing of it is linked) and Xvfb with Mesa for headless runs.
+      - name: Install system packages
+        working-directory: .
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential ca-certificates clang cmake curl g++ git gperf llvm-dev m4 \
+            libdbus-1-dev libfreetype6-dev libharfbuzz-dev liblzma-dev libudev-dev libunwind-dev \
+            libgl1-mesa-dri libgles2-mesa-dev libegl1-mesa-dev libvulkan1 mesa-vulkan-drivers \
+            libglib2.0-dev libgtk-3-dev libwebkit2gtk-4.1-dev libsoup-3.0-dev libjavascriptcoregtk-4.1-dev \
+            libx11-dev libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev libxmu-dev libxmu6 \
+            libxkbcommon0 libxkbcommon-x11-0 xorg-dev xvfb \
+            libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev libgstreamer-plugins-bad1.0-dev \
+            libgstreamer-plugins-good1.0-dev libgstrtspserver-1.0-dev libges-1.0-dev \
+            gstreamer1.0-plugins-base gstreamer1.0-plugins-good gstreamer1.0-plugins-bad \
+            gstreamer1.0-plugins-ugly gstreamer1.0-libav gstreamer1.0-tools
+
+      # rust-toolchain.toml names the toolchain; rustup installs it on first use.
+      - name: Show the toolchain
+        run: rustup show active-toolchain && cargo --version
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: tauri-servo/tauri-runtime-servo
+
+      # -p for each package: `--all` would format the path dependencies (the
+      # whole Servo fork) in this workspace's style.
+      - name: Formatting
+        run: cargo fmt -p tauri-runtime-servo -p helloworld -- --check
+
+      # Everything in the release profile, so Servo is compiled once for the
+      # tests and both builds of the example (a debug Servo is a second
+      # full build).
+      - name: Lints
+        run: cargo clippy --release --workspace --all-targets --all-features -- -D warnings
+
+      # rustdoc compiles with debug assertions on whatever the profile, so in
+      # the release profile it sees the devtools methods while tauri-runtime
+      # (compiled without debug assertions) has none, and fails. With the
+      # `devtools` feature both have them.
+      - name: Documentation
+        env:
+          RUSTDOCFLAGS: -D warnings
+        run: cargo doc --release --no-deps -p tauri-runtime-servo --features devtools
+
+      - name: Tests
+        run: xvfb-run -a cargo test --release -p tauri-runtime-servo --features devtools
+
+      - name: The example
+        run: cargo build --release -p helloworld
+
+      - name: The example in production mode
+        run: cargo build --release -p helloworld --features custom-protocol
+
+      - name: The example with WebDriver
+        run: cargo build --release -p helloworld --features tauri-runtime-servo/webdriver
