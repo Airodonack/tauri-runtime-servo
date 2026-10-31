@@ -36,7 +36,8 @@ use std::future::Future;
 use std::pin::Pin;
 use std::sync::{Arc, RwLock};
 
-use http::header::{HeaderValue, ORIGIN};
+use http::header::{HeaderMap, HeaderValue, ORIGIN};
+use http::{Method, StatusCode};
 use ipc_channel::ipc;
 use ipc_channel::router::ROUTER;
 use net_traits::request::{BodyChunkRequest, BodyChunkResponse, Origin};
@@ -146,11 +147,7 @@ impl SchemeHandlers {
     /// scheme a webview has brought so far. Called once, as Servo is built.
     pub fn registry(&self, post: MainThreadPoster) -> ProtocolRegistry {
         let mut handlers = self.0.write().unwrap();
-        let schemes: BTreeSet<String> = TAURI_SCHEMES
-            .iter()
-            .map(|s| s.to_string())
-            .chain(handlers.by_scheme.keys().cloned())
-            .collect();
+        let schemes = handlers.schemes_to_register();
         let mut registry = ProtocolRegistry::default();
         for scheme in &schemes {
             let forwarder = Forwarder {
@@ -197,10 +194,12 @@ impl SchemeHandlers {
             } => (label, handler, post, uri),
         };
         let request = load.request();
-        let mut tauri_request = http::Request::new(Vec::new());
-        *tauri_request.method_mut() = request.method.clone();
-        *tauri_request.headers_mut() = request.headers.clone();
-        *tauri_request.uri_mut() = uri;
+        let tauri_request = tauri_request(
+            request.method.clone(),
+            request.headers.clone(),
+            uri,
+            Vec::new(),
+        );
 
         // The load is not `Send` and the answer may come from any thread:
         // the load waits on the main thread, the answer is posted there.
@@ -280,6 +279,17 @@ impl SchemeHandlers {
     }
 }
 
+impl Handlers {
+    /// Tauri's schemes and every scheme a webview has brought so far.
+    fn schemes_to_register(&self) -> BTreeSet<String> {
+        TAURI_SCHEMES
+            .iter()
+            .map(|s| s.to_string())
+            .chain(self.by_scheme.keys().cloned())
+            .collect()
+    }
+}
+
 /// The runtime's `ServoDelegate`: Servo offers it the loads made for no
 /// webview, which would otherwise go to the network unasked. App pages
 /// among them are refused ([`SchemeHandlers::intercept`]).
@@ -324,22 +334,11 @@ impl ProtocolHandler for Forwarder {
         let url = request.current_url();
         let timing = ResourceFetchTiming::new(request.timing_type());
         let mut headers = request.headers.clone();
-        // Servo adds `Origin` in its HTTP fetch only, which a custom scheme
-        // never reaches; Tauri's IPC requires it (it decides from it whether
-        // the page is local or remote). An app page's is Tauri's own.
-        if !headers.contains_key(ORIGIN)
-            && let Origin::Origin(origin) = &request.origin
-        {
-            let origin = origin.ascii_serialization();
-            let origin = if origin == format!("http://{APP_HOST}") {
-                "tauri://localhost".into()
-            } else {
-                origin
-            };
-            if let Ok(value) = HeaderValue::from_str(&origin) {
-                headers.insert(ORIGIN, value);
-            }
-        }
+        let page_origin = match &request.origin {
+            Origin::Origin(origin) => Some(origin.ascii_serialization()),
+            _ => None,
+        };
+        add_origin(&mut headers, page_origin.as_deref());
         let method = request.method.clone();
         let body = request
             .body
@@ -359,17 +358,15 @@ impl ProtocolHandler for Forwarder {
                 },
                 None => Vec::new(),
             };
-            let mut tauri_request = http::Request::new(body);
-            *tauri_request.method_mut() = method;
-            *tauri_request.headers_mut() = headers;
-            match url.as_str().parse() {
-                Ok(uri) => *tauri_request.uri_mut() = uri,
+            let uri = match url.as_str().parse() {
+                Ok(uri) => uri,
                 Err(error) => {
                     return Response::network_error(NetworkError::ResourceLoadError(format!(
                         "{url} is not a valid request URI: {error}"
                     )));
                 }
-            }
+            };
+            let tauri_request = tauri_request(method, headers, uri, body);
 
             let Some((label, handler)) = self.handlers.find(&self.scheme, webview) else {
                 log::warn!("{}: no handler for {url}", self.scheme);
@@ -423,14 +420,7 @@ fn finish_app_load(id: u64, response: http::Response<Cow<'static, [u8]>>) {
     let (parts, body) = response.into_parts();
     let servo_response = WebResourceResponse::new(load.request().url.clone())
         .status_code(parts.status)
-        .status_message(
-            parts
-                .status
-                .canonical_reason()
-                .unwrap_or_default()
-                .as_bytes()
-                .to_vec(),
-        )
+        .status_message(reason_phrase(parts.status))
         .headers(parts.headers);
     let mut intercepted = load.intercept(servo_response);
     if !body.is_empty() {
@@ -439,17 +429,61 @@ fn finish_app_load(id: u64, response: http::Response<Cow<'static, [u8]>>) {
     intercepted.finish();
 }
 
+/// Servo adds `Origin` in its HTTP fetch only, which a custom scheme never
+/// reaches; Tauri's IPC requires it (it decides from it whether the page is
+/// local or remote). `page_origin` is the page's serialized origin, `None`
+/// for an opaque one; an app page's is Tauri's own, `tauri://localhost`. An
+/// `Origin` the request has already is kept.
+fn add_origin(headers: &mut HeaderMap, page_origin: Option<&str>) {
+    if headers.contains_key(ORIGIN) {
+        return;
+    }
+    let Some(origin) = page_origin else { return };
+    let origin = if origin == format!("http://{APP_HOST}") {
+        "tauri://localhost"
+    } else {
+        origin
+    };
+    if let Ok(value) = HeaderValue::from_str(origin) {
+        headers.insert(ORIGIN, value);
+    }
+}
+
+/// The request Tauri's handler gets, for an app page or a scheme request.
+fn tauri_request(
+    method: Method,
+    headers: HeaderMap,
+    uri: http::Uri,
+    body: Vec<u8>,
+) -> http::Request<Vec<u8>> {
+    let mut request = http::Request::new(body);
+    *request.method_mut() = method;
+    *request.headers_mut() = headers;
+    *request.uri_mut() = uri;
+    request
+}
+
+/// The status line's text for a status code, empty for one without a
+/// standard reason (Tauri's responses carry none of their own).
+fn reason_phrase(status: StatusCode) -> Vec<u8> {
+    status
+        .canonical_reason()
+        .unwrap_or_default()
+        .as_bytes()
+        .to_vec()
+}
+
 /// The answer to an app page the runtime cannot route.
 fn refusal(url: Url) -> (WebResourceResponse, Vec<u8>) {
-    let status = http::StatusCode::INTERNAL_SERVER_ERROR;
-    let mut headers = http::HeaderMap::new();
+    let status = StatusCode::INTERNAL_SERVER_ERROR;
+    let mut headers = HeaderMap::new();
     headers.insert(
         http::header::CONTENT_TYPE,
         HeaderValue::from_static("text/plain; charset=utf-8"),
     );
     let response = WebResourceResponse::new(url)
         .status_code(status)
-        .status_message(status.canonical_reason().unwrap_or_default().into())
+        .status_message(reason_phrase(status))
         .headers(headers);
     (
         response,
@@ -471,15 +505,7 @@ fn to_servo_response(
 ) -> Response {
     let (parts, body) = response.into_parts();
     let mut servo_response = Response::new(url, timing);
-    servo_response.status = HttpStatus::new_raw(
-        parts.status.as_u16(),
-        parts
-            .status
-            .canonical_reason()
-            .unwrap_or_default()
-            .as_bytes()
-            .to_vec(),
-    );
+    servo_response.status = HttpStatus::new_raw(parts.status.as_u16(), reason_phrase(parts.status));
     servo_response.headers = parts.headers;
     *servo_response.body.lock() = ResponseBody::Done(body.into_owned());
     servo_response
@@ -618,5 +644,211 @@ mod tests {
         schemes.add_webview("remote", HashMap::from([("ipc".to_owned(), handler())]));
         let found = schemes.find("ipc", None).map(|(label, _)| label);
         assert_eq!(found, None);
+    }
+
+    /// The label `find` gives a request from the webview Servo knows as
+    /// `webview_id()`, recorded as `label`.
+    fn found_for(schemes: &SchemeHandlers, scheme: &str, label: &str) -> Option<String> {
+        schemes.set_webview_id(webview_id(), label);
+        schemes
+            .find(scheme, Some(webview_id()))
+            .map(|(label, _)| label)
+    }
+
+    #[test]
+    fn a_request_goes_to_the_webview_it_names() {
+        let schemes = SchemeHandlers::default();
+        schemes.add_webview("main", HashMap::from([("ipc".to_owned(), handler())]));
+        schemes.add_webview("panel", HashMap::from([("ipc".to_owned(), handler())]));
+        assert_eq!(
+            found_for(&schemes, "ipc", "panel").as_deref(),
+            Some("panel")
+        );
+        assert_eq!(found_for(&schemes, "ipc", "main").as_deref(), Some("main"));
+    }
+
+    #[test]
+    fn a_request_for_an_unknown_scheme_is_refused() {
+        let schemes = SchemeHandlers::default();
+        schemes.add_webview("main", HashMap::from([("ipc".to_owned(), handler())]));
+        assert_eq!(found_for(&schemes, "plugin-x", "main"), None);
+        assert!(schemes.find("plugin-x", None).is_none());
+    }
+
+    #[test]
+    fn a_webview_without_the_scheme_is_not_given_another_s_handler() {
+        // "remote" has no `ipc` handler (Tauri gave it none); its requests
+        // must not reach the only webview that has one.
+        let schemes = SchemeHandlers::default();
+        schemes.add_webview("trusted", HashMap::from([("ipc".to_owned(), handler())]));
+        schemes.add_webview("remote", HashMap::from([("asset".to_owned(), handler())]));
+        assert_eq!(found_for(&schemes, "ipc", "remote"), None);
+    }
+
+    fn registered(schemes: &SchemeHandlers) -> Vec<String> {
+        let handlers = schemes.0.read().unwrap();
+        handlers.schemes_to_register().into_iter().collect()
+    }
+
+    #[test]
+    fn tauri_s_schemes_are_registered_before_any_webview_brings_them() {
+        let schemes = SchemeHandlers::default();
+        assert_eq!(registered(&schemes), ["asset", "ipc", "tauri"]);
+        schemes.add_webview(
+            "main",
+            HashMap::from([
+                ("ipc".to_owned(), handler()),
+                ("plugin-x".to_owned(), handler()),
+            ]),
+        );
+        assert_eq!(registered(&schemes), ["asset", "ipc", "plugin-x", "tauri"]);
+    }
+
+    fn url(text: &str) -> Url {
+        Url::parse(text).unwrap()
+    }
+
+    #[test]
+    fn app_pages_load_from_tauri_localhost() {
+        let cases = [
+            (
+                "tauri://localhost/index.html",
+                "http://tauri.localhost/index.html",
+            ),
+            ("tauri://localhost", "http://tauri.localhost/"),
+            (
+                "tauri://localhost/a/b.js?x=1&y=%2F#top",
+                "http://tauri.localhost/a/b.js?x=1&y=%2F#top",
+            ),
+            (
+                "tauri://localhost/caf%C3%A9%20menu.html",
+                "http://tauri.localhost/caf%C3%A9%20menu.html",
+            ),
+            // The port and user info have no place in an app page's URL.
+            ("tauri://localhost:8080/x", "http://tauri.localhost/x"),
+            (
+                "tauri://user:secret@localhost/x",
+                "http://tauri.localhost/x",
+            ),
+        ];
+        for (tauri, servo) in cases {
+            assert_eq!(to_servo_url(url(tauri)).as_str(), servo, "{tauri}");
+        }
+    }
+
+    #[test]
+    fn other_urls_load_as_they_are() {
+        for other in [
+            "tauri://other/index.html",
+            "asset://localhost/file.png",
+            "ipc://localhost/cmd",
+            "http://127.0.0.1:47123/",
+            "https://tauri.localhost/",
+            "http://localhost/",
+        ] {
+            assert_eq!(to_servo_url(url(other)).as_str(), other);
+        }
+    }
+
+    #[test]
+    fn tauri_sees_app_pages_as_tauri_localhost() {
+        let cases = [
+            ("http://tauri.localhost/", "tauri://localhost/"),
+            (
+                "http://tauri.localhost/a/b.js?x=1#top",
+                "tauri://localhost/a/b.js?x=1#top",
+            ),
+            (
+                "http://tauri.localhost/caf%C3%A9.html",
+                "tauri://localhost/caf%C3%A9.html",
+            ),
+            ("http://user@tauri.localhost/x", "tauri://localhost/x"),
+        ];
+        for (servo, tauri) in cases {
+            assert_eq!(to_tauri_url(url(servo)).as_str(), tauri, "{servo}");
+        }
+    }
+
+    #[test]
+    fn only_the_app_host_on_port_80_is_an_app_page() {
+        for other in [
+            "http://tauri.localhost:8080/",
+            "https://tauri.localhost/",
+            "http://tauri.localhost.example/",
+            "http://127.0.0.1:47123/",
+            "ipc://localhost/cmd",
+        ] {
+            assert_eq!(to_tauri_url(url(other)).as_str(), other);
+        }
+        // An explicit :80 is the default port, which the URL parser drops.
+        assert_eq!(
+            to_tauri_url(url("http://tauri.localhost:80/x")).as_str(),
+            "tauri://localhost/x"
+        );
+    }
+
+    #[test]
+    fn app_page_urls_survive_the_round_trip() {
+        for tauri in [
+            "tauri://localhost/",
+            "tauri://localhost/index.html?q=a%20b#h",
+            "tauri://localhost/assets/%E2%9C%93.svg",
+        ] {
+            assert_eq!(to_tauri_url(to_servo_url(url(tauri))).as_str(), tauri);
+        }
+    }
+
+    fn origin_of(headers: &HeaderMap) -> Option<&str> {
+        headers.get(ORIGIN).map(|v| v.to_str().unwrap())
+    }
+
+    #[test]
+    fn a_page_s_origin_is_added_and_an_app_page_s_is_tauri_s() {
+        let mut headers = HeaderMap::new();
+        add_origin(&mut headers, Some("http://127.0.0.1:47123"));
+        assert_eq!(origin_of(&headers), Some("http://127.0.0.1:47123"));
+
+        let mut headers = HeaderMap::new();
+        add_origin(&mut headers, Some("http://tauri.localhost"));
+        assert_eq!(origin_of(&headers), Some("tauri://localhost"));
+
+        // Another port on the app host is someone else's server.
+        let mut headers = HeaderMap::new();
+        add_origin(&mut headers, Some("http://tauri.localhost:8080"));
+        assert_eq!(origin_of(&headers), Some("http://tauri.localhost:8080"));
+    }
+
+    #[test]
+    fn an_origin_header_already_there_is_kept() {
+        let mut headers = HeaderMap::new();
+        headers.insert(ORIGIN, HeaderValue::from_static("https://example.com"));
+        add_origin(&mut headers, Some("http://tauri.localhost"));
+        assert_eq!(origin_of(&headers), Some("https://example.com"));
+    }
+
+    #[test]
+    fn an_opaque_origin_adds_no_header() {
+        let mut headers = HeaderMap::new();
+        add_origin(&mut headers, None);
+        assert_eq!(origin_of(&headers), None);
+    }
+
+    #[test]
+    fn tauri_s_request_carries_method_headers_uri_and_body() {
+        let mut headers = HeaderMap::new();
+        headers.insert("x-probe", HeaderValue::from_static("hdr"));
+        let uri = "ipc://localhost/reverse_bytes".parse().unwrap();
+        let request = tauri_request(Method::POST, headers, uri, vec![1, 2, 3]);
+        assert_eq!(*request.method(), Method::POST);
+        assert_eq!(request.uri(), "ipc://localhost/reverse_bytes");
+        assert_eq!(request.headers()["x-probe"], "hdr");
+        assert_eq!(request.body(), &[1, 2, 3]);
+    }
+
+    #[test]
+    fn statuses_without_a_standard_reason_have_an_empty_one() {
+        assert_eq!(reason_phrase(StatusCode::OK), b"OK");
+        assert_eq!(reason_phrase(StatusCode::NOT_FOUND), b"Not Found");
+        assert_eq!(reason_phrase(StatusCode::from_u16(599).unwrap()), b"");
     }
 }
