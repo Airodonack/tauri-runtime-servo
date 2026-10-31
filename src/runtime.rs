@@ -22,7 +22,7 @@ use std::thread::{ThreadId, current as current_thread};
 
 use euclid::Scale;
 use raw_window_handle::{DisplayHandle, HasDisplayHandle};
-use servo::{EventLoopWaker, Opts, Preferences, Servo, ServoBuilder};
+use servo::{EventLoopWaker, Opts, PrefValue, Preferences, Servo, ServoBuilder};
 use tao::event::{Event, StartCause, WindowEvent as TaoWindowEvent};
 use tao::event_loop::{
     ControlFlow, DeviceEventFilter as TaoDeviceEventFilter, EventLoop, EventLoopBuilder,
@@ -166,13 +166,19 @@ impl<T: UserEvent> Context<T> {
             }
             return servo.clone();
         }
-        let preferences = Preferences {
-            dom_media_source_enabled: true,
+        let mut preferences = Preferences {
             // Off by default in Servo (experimental); SvelteKit's link
             // preloader throws without it.
             dom_intersection_observer_enabled: true,
             ..Default::default()
         };
+        // Media Source Extensions exist in the fork's libservo only: set by
+        // name, so the crate also builds against libservo 0.7.0 as
+        // published, which has no such preference.
+        const MEDIA_SOURCE: &str = "dom_media_source_enabled";
+        if Preferences::exists(MEDIA_SOURCE) {
+            preferences.set_value(MEDIA_SOURCE, PrefValue::Bool(true));
+        }
         let config_dir = data_directory
             .map(Path::to_path_buf)
             .or_else(|| self.default_data_dir.clone());
