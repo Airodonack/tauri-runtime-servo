@@ -1,10 +1,9 @@
 # Formatting, lints, tests and the example's build, on Ubuntu, headless.
 #
-# The crate depends on the Servo fork and its Stylo branch by path
-# (../../servo and ../../stylo from the crate), so the job checks the three
-# repositories out side by side in that layout. The Stylo branch is not on
-# GitHub yet: until it is, STYLO_REPOSITORY below has nothing to clone and
-# the job fails at checkout.
+# The crate depends on the Servo fork by path (../../servo from the crate),
+# so the job checks the two repositories out side by side in that layout.
+# Stylo is a git dependency (the [patch.crates-io] block of Cargo.toml), which
+# cargo fetches itself: no checkout.
 name: check
 
 on:
@@ -15,8 +14,6 @@ on:
 env:
   SERVO_REPOSITORY: Airodonack/servo
   SERVO_REF: vodscribe/main
-  STYLO_REPOSITORY: Airodonack/stylo
-  STYLO_REF: servo-scrollbars-0.22.0
   CARGO_TERM_COLOR: always
   CC: clang
   CXX: clang++
@@ -39,13 +36,6 @@ jobs:
           repository: ${{ env.SERVO_REPOSITORY }}
           ref: ${{ env.SERVO_REF }}
           path: servo
-          fetch-depth: 1
-      - name: Check out the Stylo branch
-        uses: actions/checkout@v4
-        with:
-          repository: ${{ env.STYLO_REPOSITORY }}
-          ref: ${{ env.STYLO_REF }}
-          path: stylo
           fetch-depth: 1
 
       # Servo's build is large: make room on the runner first.
