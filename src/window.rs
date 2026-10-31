@@ -1196,8 +1196,9 @@ pub fn create_window<T: UserEvent, F: Fn(RawWindow) + Send + 'static>(
 
 /// `prevent_overflow`: the window's inner and outer size shrunk to the
 /// monitor's work area less `margin` (physical or logical, at
-/// `scale_factor`), or `None` when the window fits already. As in
-/// tauri-runtime-wry, a margin larger than the work area is not checked.
+/// `scale_factor`), or `None` when the window fits already. A margin
+/// larger than the work area leaves no room (tauri-runtime-wry's
+/// subtraction overflows there).
 fn fit_in_work_area(
     mut inner_size: PhysicalSize<u32>,
     mut window_size: PhysicalSize<u32>,
@@ -1207,8 +1208,8 @@ fn fit_in_work_area(
 ) -> Option<(PhysicalSize<u32>, PhysicalSize<u32>)> {
     let margin = margin.to_physical::<u32>(scale_factor);
     let constraint = PhysicalSize::new(
-        work_area.width - margin.width,
-        work_area.height - margin.height,
+        work_area.width.saturating_sub(margin.width),
+        work_area.height.saturating_sub(margin.height),
     );
     if window_size.width <= constraint.width && window_size.height <= constraint.height {
         return None;
@@ -1321,6 +1322,18 @@ mod tests {
         assert_eq!(
             fit_in_work_area(size(0, 0), size(0, 0), WORK_AREA, no_margin(), 1.0),
             None
+        );
+    }
+
+    #[test]
+    fn a_margin_larger_than_the_work_area_leaves_no_room() {
+        // A margin from the app's config wider and taller than the screen:
+        // the room left is none, not a subtraction that overflows.
+        let margin: Size = PhysicalSize::new(2000, 1100).into();
+        let window = size(800, 600);
+        assert_eq!(
+            fit_in_work_area(window, window, WORK_AREA, margin, 1.0),
+            Some((size(0, 0), size(0, 0)))
         );
     }
 }

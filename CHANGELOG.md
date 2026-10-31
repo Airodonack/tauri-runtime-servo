@@ -26,4 +26,6 @@ under the closing "Fixes" bullet.
 - An app page the runtime can't hand to the app gets an error page; it is
   never fetched from the network instead.
 - The page's console appears in the log at debug level only.
+- A `preventOverflow` margin larger than the screen no longer crashes
+  debug builds; the window is shrunk to the room left, which is none.
 - Works with NVIDIA's drivers as with Mesa's.
