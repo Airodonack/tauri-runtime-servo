@@ -1,18 +1,6 @@
 [toolchain]
-# Be sure to also update the rust version in the following places when bumping the version:
-# - the 'rust-overlay' module's url in shell.nix to point to a
-#   commit which supports the required rustc version
-# - the version in support/crown/rust-toolchain.toml
-# - the version in .devcontainer/Dockerfile
+# The toolchain the Servo fork is built with (its own rust-toolchain.toml):
+# libservo and mozjs are tested on it, and a build shares Servo's compiled
+# artifacts only with the same compiler. Bump together with the fork.
 channel = "1.97.1"
-
-components = [
-    "clippy",
-    # For support/crown
-    "llvm-tools",
-    # For support/crown
-    "rustc-dev",
-    "rustfmt",
-    # For rust-analyzer
-    "rust-src",
-]
+components = ["clippy", "rustfmt"]
