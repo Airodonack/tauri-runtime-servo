@@ -123,7 +123,7 @@ fn page_ready(window: WebviewWindow<Runtime>) {
 fn main() {
     env_logger::Builder::from_env(
         env_logger::Env::default()
-            .default_filter_or("warn,tauri_runtime_servo=info,console=info,helloworld=info"),
+            .default_filter_or("warn,tauri_runtime_servo=info,console=debug,helloworld=info"),
     )
     .init();
 
