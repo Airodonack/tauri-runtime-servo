@@ -9954,6 +9954,7 @@ dependencies = [
  "rustls",
  "serde_json",
  "servo",
+ "servo-base",
  "servo-net-traits",
  "servo-webdriver-server",
  "tao",

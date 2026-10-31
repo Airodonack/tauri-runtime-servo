@@ -20,5 +20,7 @@ under the closing "Fixes" bullet.
 - A page's IPC requests are answered with its own webview's permissions,
   and refused when the webview they came from is unknown and several could
   take them.
+- An app page the runtime can't hand to the app gets an error page; it is
+  never fetched from the network instead.
 - The page's console appears in the log at debug level only.
 - Works with NVIDIA's drivers as with Mesa's.
