@@ -657,7 +657,9 @@ pub fn handle_webview_message<T: UserEvent>(
 /// The Tauri [`WebviewDispatch`] for [`ServoRuntime`].
 #[derive(Debug, Clone)]
 pub struct ServoWebviewDispatcher<T: UserEvent> {
-    pub(crate) window_id: Arc<Mutex<WindowId>>,
+    /// Fixed: a webview stays in the window it was made in (`reparent` is
+    /// not supported), so there is nothing to share or lock.
+    pub(crate) window_id: WindowId,
     pub(crate) webview_id: WebviewId,
     pub(crate) context: Context<T>,
 }
@@ -672,9 +674,8 @@ macro_rules! webview_getter {
 
 impl<T: UserEvent> ServoWebviewDispatcher<T> {
     fn send(&self, message: WebviewMessage) -> Result<()> {
-        let window_id = *self.window_id.lock().unwrap();
         self.context
-            .send_user_message(Message::Webview(window_id, self.webview_id, message))
+            .send_user_message(Message::Webview(self.window_id, self.webview_id, message))
     }
 }
 
