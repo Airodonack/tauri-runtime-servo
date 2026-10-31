@@ -548,7 +548,6 @@ pub enum WindowMessage {
     SetBackgroundColor(Option<Color>),
     DragWindow,
     ResizeDragWindow(tauri_runtime::ResizeDirection),
-    RequestRedraw,
 }
 
 /// Runs a window message on the main thread. `Close` and `Destroy` never
@@ -692,7 +691,6 @@ pub fn handle_window_message(
         WindowMessage::ResizeDragWindow(direction) => {
             let _ = window.drag_resize_window(resize_direction(direction));
         }
-        WindowMessage::RequestRedraw => window.request_redraw(),
         WindowMessage::SetBadgeCount(count, desktop_filename) => {
             window.set_badge_count(count, desktop_filename)
         }
