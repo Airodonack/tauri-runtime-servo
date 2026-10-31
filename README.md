@@ -147,13 +147,13 @@ fn main() {
 | Feature | Default | What it does, and why |
 |---|---|---|
 | `devtools` | off | Mirrors `tauri-runtime`'s: the devtools methods exist on the trait in debug builds and with it. They do nothing yet (Servo has no inspector window). |
-| `webdriver` | off | Builds in Servo's WebDriver server so end-to-end tests drive the app over W3C WebDriver, with no tauri-driver. **Test builds only**: the server listens on every network interface (`0.0.0.0`, Servo's own choice) and runs any script it is sent in the app's pages, which can call the app's commands. Never ship it. |
+| `webdriver` | off | Builds in Servo's WebDriver server so end-to-end tests drive the app over W3C WebDriver, with no tauri-driver. **Test builds only**: the server listens on the loopback interface only (`127.0.0.1`), so no other machine can reach it, but any program on this one can, and it runs any script it is sent in the app's pages, which can call the app's commands. Never ship it. |
 
 ### Environment variables
 
 | Variable | What it does, and why |
 |---|---|
-| `TAURI_RUNTIME_SERVO_WEBDRIVER_PORT` | With the `webdriver` feature, the port the WebDriver server listens on. Unset or empty: no server. Without the feature it only logs an error, so a test setting it against a wrong build says so. |
+| `TAURI_RUNTIME_SERVO_WEBDRIVER_PORT` | With the `webdriver` feature, the port the WebDriver server listens on, on `127.0.0.1`. Unset or empty: no server. Without the feature it only logs an error, so a test setting it against a wrong build says so. |
 | `XDG_DATA_HOME` | Where the page's storage, cookies and HSTS list go: Tauri hands every webview its app local data folder (`$XDG_DATA_HOME/<identifier>`, or `~/.local/share/<identifier>`), and Servo keeps one store for the process in the first webview's. Point it at a scratch folder for tests. |
 | `RUST_LOG` | The runtime logs through `log` under `tauri_runtime_servo`; the page's console under the target `console`, at debug level (`RUST_LOG=console=debug` to see it): a page's console is no place for an app's log file. |
 | `GDK_BACKEND` | `x11` under a Wayland session, so the windows are X11 ones (through XWayland). |

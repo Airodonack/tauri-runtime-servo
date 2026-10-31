@@ -88,6 +88,6 @@ khronos-egl = { version = "6", features = ["dynamic"] }
 # builds and with this feature.
 devtools = ["tauri-runtime/devtools"]
 # Servo's WebDriver server, started when TAURI_RUNTIME_SERVO_WEBDRIVER_PORT
-# names a port. Test builds only: it listens on every interface and runs
-# any script it is sent.
+# names a port. Test builds only: it listens on 127.0.0.1, where any local
+# program can reach it, and runs any script it is sent.
 webdriver = ["dep:webdriver_server"]

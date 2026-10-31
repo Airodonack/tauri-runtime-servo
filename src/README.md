@@ -29,4 +29,4 @@ A dispatcher call made on the main thread runs at once; from anywhere else it is
 | `input.rs` | tao's pointer, wheel and key events converted to Servo input events (after servoshell). |
 | `dialog.rs` | The page's `alert()`, `confirm()` and `prompt()` as GTK message dialogs, which WebDriver can also answer. |
 | `monitor.rs` | tao's monitors as Tauri's `Monitor`, work areas and centring (adapted from tauri-runtime-wry). |
-| `webdriver.rs` | Servo's WebDriver server for end-to-end tests (the `webdriver` feature): starting it and answering the commands it sends the embedder. |
+| `webdriver.rs` | Servo's WebDriver server for end-to-end tests (the `webdriver` feature): starting it on 127.0.0.1 and answering the commands it sends the embedder. |
