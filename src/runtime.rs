@@ -294,7 +294,7 @@ impl<T: UserEvent> Context<T> {
             webview: DetachedWebview {
                 label: label.clone(),
                 dispatcher: ServoWebviewDispatcher {
-                    window_id: Arc::new(Mutex::new(window_id)),
+                    window_id,
                     webview_id: id,
                     context: self.clone(),
                 },
@@ -335,7 +335,7 @@ impl<T: UserEvent> Context<T> {
         rx.recv().map_err(|_| Error::FailedToReceiveMessage)??;
 
         let dispatcher = ServoWebviewDispatcher {
-            window_id: Arc::new(Mutex::new(window_id)),
+            window_id,
             webview_id,
             context: self.clone(),
         };
