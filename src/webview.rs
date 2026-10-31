@@ -857,3 +857,104 @@ impl<T: UserEvent> WebviewDispatch<T> for ServoWebviewDispatcher<T> {
         Err(unsupported("clear_all_browsing_data"))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use std::collections::HashMap;
+
+    use servo::JavaScriptErrorInfo;
+
+    use super::*;
+
+    #[test]
+    fn results_come_back_as_json_stringify_gives_them() {
+        let cases = [
+            (
+                JSValue::String("Hello from Servo".into()),
+                r#""Hello from Servo""#,
+            ),
+            (JSValue::String("say \"hi\"\n".into()), r#""say \"hi\"\n""#),
+            (JSValue::Number(42.0), "42"),
+            (JSValue::Number(-0.5), "-0.5"),
+            (JSValue::Number(f64::NAN), "null"),
+            (JSValue::Number(f64::INFINITY), "null"),
+            (JSValue::Boolean(true), "true"),
+            (JSValue::Null, "null"),
+            (JSValue::Element("e1".into()), "{}"),
+            (JSValue::Window("w1".into()), "{}"),
+            (
+                JSValue::Array(vec![
+                    JSValue::Number(1.0),
+                    JSValue::String("two".into()),
+                    JSValue::Null,
+                    JSValue::Undefined,
+                ]),
+                r#"[1,"two",null,null]"#,
+            ),
+        ];
+        for (value, json) in cases {
+            assert_eq!(js_value_to_json(&value), json, "{value:?}");
+        }
+    }
+
+    #[test]
+    fn undefined_has_no_json_and_comes_back_empty() {
+        assert_eq!(js_value_to_json(&JSValue::Undefined), "");
+    }
+
+    #[test]
+    fn an_object_leaves_out_its_undefined_members() {
+        let object = JSValue::Object(HashMap::from([
+            ("answer".to_owned(), JSValue::Number(42.0)),
+            ("gone".to_owned(), JSValue::Undefined),
+            (
+                "nested".to_owned(),
+                JSValue::Object(HashMap::from([(
+                    "flag".to_owned(),
+                    JSValue::Boolean(false),
+                )])),
+            ),
+        ]));
+        let json: serde_json::Value = serde_json::from_str(&js_value_to_json(&object)).unwrap();
+        assert_eq!(
+            json,
+            serde_json::json!({ "answer": 42, "nested": { "flag": false } })
+        );
+    }
+
+    #[test]
+    fn integers_beyond_2_to_the_53_keep_their_value_as_floats() {
+        // Past Number.MAX_SAFE_INTEGER + 1 the value is no longer cast to i64.
+        let json = js_value_to_json(&JSValue::Number(2f64.powi(60)));
+        assert_eq!(json.parse::<f64>().unwrap(), 2f64.powi(60));
+    }
+
+    #[test]
+    fn a_script_that_throws_says_where() {
+        let error = JavaScriptEvaluationError::EvaluationFailure(Some(JavaScriptErrorInfo {
+            message: "boom".into(),
+            filename: "".into(),
+            stack: None,
+            line_number: 1,
+            column: 7,
+        }));
+        assert_eq!(describe_eval_error(&error), "error: boom (:1)");
+        assert_eq!(
+            describe_eval_error(&JavaScriptEvaluationError::WebViewNotReady),
+            "error: WebViewNotReady"
+        );
+    }
+
+    #[test]
+    fn main_frame_scripts_are_wrapped_and_others_are_not() {
+        let script = |for_main_frame_only| InitializationScript {
+            script: "var x = 1;".into(),
+            for_main_frame_only,
+        };
+        assert_eq!(
+            user_script(script(true)),
+            "if (window.top === window) {\nvar x = 1;\n}"
+        );
+        assert_eq!(user_script(script(false)), "var x = 1;");
+    }
+}
