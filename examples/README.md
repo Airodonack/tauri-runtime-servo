@@ -19,5 +19,5 @@ The first build compiles Servo; later ones only the runtime and the app.
 
 | Folder | What it holds |
 |---|---|
-| [`helloworld/`](helloworld/README.md) | Tauri's hello world, extended to exercise every IPC surface an app uses (commands of each kind, events, a plugin, `eval`), printing a `RESULT` line for each check. |
+| [`helloworld/`](helloworld/README.md) | Tauri's hello world, extended to exercise every IPC surface an app uses (commands of each kind, events, a plugin, `eval`), printing a `RESULT` line for each check; with the smoke test CI runs it under. |
 | [`menubar/`](menubar/README.md) | A window with a menu bar from Tauri's menu API: checks that the page starts below the bar and follows it when the bar is hidden or shown, and that the menu's items reach the app, printing a `RESULT` line for each check. |

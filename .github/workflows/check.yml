@@ -1,4 +1,5 @@
-# Formatting, lints, tests and the example's build, on Ubuntu, headless.
+# Formatting, lints, tests and the example's build, on Ubuntu, headless;
+# then the example run headless as a smoke test (the `smoke` job).
 #
 # The crate depends on the Servo fork by path (../../servo from the crate),
 # so the job checks the two repositories out side by side in that layout.
@@ -96,11 +97,65 @@ jobs:
       - name: Tests
         run: xvfb-run -a cargo test --release -p tauri-runtime-servo --features devtools -- --include-ignored
 
+      # Copied at once: the next two builds write the same path.
       - name: The example
-        run: cargo build --release -p helloworld
+        run: |
+          cargo build --release -p helloworld
+          mkdir -p smoke && cp target/release/helloworld smoke/helloworld
+
+      - name: Keep the example for the smoke test
+        uses: actions/upload-artifact@v4
+        with:
+          name: helloworld
+          path: tauri-servo/tauri-runtime-servo/smoke/helloworld
+          retention-days: 7
 
       - name: The example in production mode
         run: cargo build --release -p helloworld --features custom-protocol
 
       - name: The example with WebDriver
         run: cargo build --release -p helloworld --features tauri-runtime-servo/webdriver
+
+  # The libservo canary: the example built above, run headless on its own
+  # Xvfb display until it closes itself; it fails if any RESULT line of
+  # examples/helloworld/expected-results.txt is missing or the app does not
+  # exit with status 0. On a runner of its own, the binary runs away from
+  # the tree it was built in, as an app's would.
+  smoke:
+    needs: check
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Check out the runtime
+        uses: actions/checkout@v4
+
+      # The check job's list: its development packages bring every library
+      # the binary links (a runtime-only list would be a second list to keep
+      # in step with the build's), Mesa for software rendering, GStreamer's
+      # plugins and Xvfb.
+      - name: Install system packages
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential ca-certificates clang cmake curl g++ git gperf llvm-dev m4 \
+            libdbus-1-dev libfreetype6-dev libharfbuzz-dev liblzma-dev libudev-dev libunwind-dev \
+            libgl1-mesa-dri libgles2-mesa-dev libegl1-mesa-dev libvulkan1 mesa-vulkan-drivers \
+            libglib2.0-dev libgtk-3-dev libwebkit2gtk-4.1-dev libsoup-3.0-dev libjavascriptcoregtk-4.1-dev \
+            libx11-dev libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev libxmu-dev libxmu6 \
+            libxkbcommon0 libxkbcommon-x11-0 xorg-dev xvfb \
+            libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev libgstreamer-plugins-bad1.0-dev \
+            libgstreamer-plugins-good1.0-dev libgstrtspserver-1.0-dev libges-1.0-dev \
+            gstreamer1.0-plugins-base gstreamer1.0-plugins-good gstreamer1.0-plugins-bad \
+            gstreamer1.0-plugins-ugly gstreamer1.0-libav gstreamer1.0-tools
+
+      - name: Fetch the example
+        uses: actions/download-artifact@v4
+        with:
+          name: helloworld
+          path: smoke
+
+      # Artifacts lose the executable bit.
+      - name: Run it headless
+        run: |
+          chmod +x smoke/helloworld
+          bash examples/helloworld/smoke-test.sh smoke/helloworld

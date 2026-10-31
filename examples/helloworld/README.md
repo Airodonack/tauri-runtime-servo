@@ -25,6 +25,17 @@ DISPLAY=:99 GDK_BACKEND=x11 XDG_DATA_HOME=$data/share XDG_CONFIG_HOME=$data/conf
 
 `HELLOWORLD_CLOSE_AFTER=<seconds>` closes the window from another thread after that long, as an app would, so the run ends by itself. Software rendering (Mesa's llvmpipe) is enough.
 
+## The smoke test
+
+`smoke-test.sh` does the headless run above and checks it: the app on an Xvfb display of its own (Xvfb picks a free number), with a scratch home and data folders, closing itself after 20 seconds; then every pattern in `expected-results.txt` must match one of the `RESULT` lines it printed, and the app must exit with status 0 within two minutes. CI runs it after the build; it is the first thing to fail when a libservo change breaks the runtime.
+
+```sh
+cargo build --release -p helloworld
+examples/helloworld/smoke-test.sh target/release/helloworld
+```
+
+It ends with `smoke test: passed (...)`, or lists the missing lines and the end of the app's log. `XVFB` names the Xvfb binary if it is not on the `PATH`; `HELLOWORLD_CLOSE_AFTER` and `SMOKE_TIMEOUT` change the two delays; a second argument keeps the app's log at that path. It checks the development-mode build only (the expected lines name the `devUrl`), and not the input lines (clicks, `confirm()`, scrolling), which need a driver.
+
 ## What the RESULT lines check
 
 - the page's origin and size, that Tauri's globals exist in the page and not in a hidden iframe (the initialization scripts run in the main frame only), and that `localStorage` survives a restart (a run counter);
@@ -46,4 +57,6 @@ DISPLAY=:99 GDK_BACKEND=x11 XDG_DATA_HOME=$data/share XDG_CONFIG_HOME=$data/conf
 | `Cargo.toml` | The app's dependencies: `tauri` without its default features (no wry), the runtime by path, the clipboard plugin; the `custom-protocol` feature. |
 | `build.rs` | Runs `tauri-build`, which reads `tauri.conf.json` and the capabilities and writes the generated schemas to `gen/`. |
 | `tauri.conf.json` | The app's Tauri config: identifier, `devUrl` and `frontendDist`, the window. |
+| `smoke-test.sh` | The smoke test: runs a built helloworld headless and checks its `RESULT` lines and its exit status. |
+| `expected-results.txt` | The `RESULT` lines the smoke test requires, one regular expression each. |
 | `gen/` | Written by the build (Tauri's schemas); not in git. |

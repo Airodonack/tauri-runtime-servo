@@ -1,0 +1,39 @@
+# The RESULT lines smoke-test.sh requires from an undriven run of the default
+# build (the page on the devUrl). One extended regular expression (grep -E)
+# per line, matched against each whole RESULT line; blank lines and lines
+# starting with # are skipped. Timings, the clipboard's random suffix and the
+# tick payloads vary from run to run, and the eval'd object's key order is
+# not fixed, so those are matched loosely. The input checks (clicked,
+# confirm, scrolled) need a driver and are not here.
+
+# The page: its size, origin, Tauri's globals, the initialization scripts
+# kept out of frames, and storage in a fresh data folder.
+^RESULT loaded 800x600 origin http://127\.0\.0\.1:47123$
+^RESULT globals isTauri=true __TAURI__=object invoke=function$
+^RESULT iframe __TAURI_INTERNALS__=undefined$
+^RESULT localStorage runs=1$
+
+# Commands: sync, async, failing, raw bytes with a header, 8 MB raw.
+^RESULT greet Hello, Servo! This answer came from Rust\.$
+^RESULT async 2 \+ 40 = 42$
+^RESULT fail rejected: this command always fails$
+^RESULT raw ArrayBuffer 5,4,3,2,1 \+ hdr$
+^RESULT rawbig ok 8294403 bytes back in [0-9]+ ms, tail big$
+
+# A plugin's JavaScript API, and events from Rust.
+^RESULT clipboard round trip ok: copied through Tauri on Servo [0-9]+$
+^RESULT listening for tick$
+^RESULT tick event 1 payload [0-9]+$
+^RESULT tick event 2 payload [0-9]+$
+^RESULT tick event 3 payload [0-9]+$
+
+# Rust's side: the webview's URL, and eval with its result as JSON.
+^RESULT webview url as Tauri sees it: http://127\.0\.0\.1:47123/$
+^RESULT eval early -> "http://127\.0\.0\.1:47123/"$
+^RESULT eval string -> "Hello from Servo"$
+^RESULT eval number -> 42$
+^RESULT eval object -> \{.*"answer":42.*\}$
+^RESULT eval object -> \{.*"flag":true.*\}$
+^RESULT eval object -> \{.*"list":\[1,"two",null\].*\}$
+^RESULT eval undefined -> $
+^RESULT eval throws -> error: boom \(:1\)$
