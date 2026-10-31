@@ -11,8 +11,9 @@
 //! window of its own) is answered with an error: the reply channel is
 //! dropped, which the server reports to the client.
 //!
-//! The server listens on every interface (the crate binds 0.0.0.0) and runs
-//! any script it is sent: only test builds should have the feature.
+//! The server listens on the loopback interface only (127.0.0.1), so only
+//! programs on the same machine can reach it, but it runs any script it is
+//! sent: only test builds should have the feature.
 
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -78,15 +79,19 @@ impl WebDriver {
         waker: Box<dyn servo::EventLoopWaker>,
         preferences: servo::Preferences,
     ) {
+        // Loopback only: a client that reaches the server can run script in
+        // the app's pages and so call its commands, which no other machine
+        // on the network should be able to do.
+        let address = std::net::Ipv4Addr::LOCALHOST;
         // The crate panics on its own thread when it can't listen: try the
         // port first, so a port in use is an error in the log, not a panic.
-        if let Err(e) = std::net::TcpListener::bind(("0.0.0.0", port)) {
-            log::error!("WebDriver can't listen on port {port}: {e}");
+        if let Err(e) = std::net::TcpListener::bind((address, port)) {
+            log::error!("WebDriver can't listen on {address}:{port}: {e}");
             return;
         }
         let (sender, receiver) = crossbeam_channel::unbounded();
-        webdriver_server::start_server(port, sender, waker, preferences);
-        log::info!("WebDriver server on port {port}");
+        webdriver_server::start_server(address.into(), port, sender, waker, preferences);
+        log::info!("WebDriver server on {address}:{port}");
         *self.receiver.borrow_mut() = Some(receiver);
     }
 

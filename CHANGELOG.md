@@ -15,7 +15,8 @@ under the closing "Fixes" bullet.
   window.
 - The page's storage and cookies are kept in the app's local data folder.
 - End-to-end tests can drive an app over WebDriver in builds with the
-  `webdriver` feature.
+  `webdriver` feature; the WebDriver server answers on this machine only
+  (127.0.0.1), not from the network.
 - A page's IPC requests are answered with its own webview's permissions,
   and refused when the webview they came from is unknown and several could
   take them.
