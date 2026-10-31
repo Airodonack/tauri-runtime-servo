@@ -43,7 +43,7 @@ use tauri_utils::Theme;
 
 use crate::input;
 use crate::monitor::to_monitor;
-use crate::protocol::{MainThreadPoster, SchemeHandlers};
+use crate::protocol::{AppPageGuard, MainThreadPoster, SchemeHandlers};
 use crate::webdriver::WebDriver;
 use crate::webview::{
     Bounds, ServoWebviewDispatcher, WebviewKind, WebviewMessage, WebviewWrapper, create_webview,
@@ -210,6 +210,9 @@ impl<T: UserEvent> Context<T> {
             .protocol_registry(self.schemes.registry(post))
             .event_loop_waker(Box::new(Waker(self.proxy.clone())))
             .build();
+        // Loads for no webview come to the Servo delegate: app pages among
+        // them are refused there rather than fetched.
+        servo.set_delegate(Rc::new(AppPageGuard(self.schemes.clone())));
         // After the build: the server reads Servo's options, which the
         // build sets once for the process (read first, they'd be defaults
         // and the build would panic).

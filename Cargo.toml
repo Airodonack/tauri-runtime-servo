@@ -76,6 +76,11 @@ webdriver_server = { package = "servo-webdriver-server", path = "../../servo/com
 # The channel the server's commands arrive on (the type in Servo's API).
 crossbeam-channel = "0.5"
 
+[dev-dependencies]
+# A `WebViewId` for the routing tests (libservo re-exports the type, not
+# its test constant). Already part of the build through libservo.
+servo_base = { package = "servo-base", path = "../../servo/components/shared/base" }
+
 [target.'cfg(target_os = "linux")'.dependencies]
 gtk = { version = "0.18.2", features = ["v3_24"] }
 gdkx11 = "0.18.2"

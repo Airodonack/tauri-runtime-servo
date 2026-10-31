@@ -255,7 +255,7 @@ impl WebViewDelegate for Delegate {
     }
 
     fn load_web_resource(&self, webview: WebView, load: servo::WebResourceLoad) {
-        self.schemes.intercept(webview.id(), load);
+        self.schemes.intercept(Some(webview.id()), load);
     }
 
     fn notify_traversal_complete(&self, _webview: WebView, traversal: servo::TraversalId) {

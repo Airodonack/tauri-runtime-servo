@@ -22,6 +22,12 @@
 //! a tuple origin, a secure context (a `.localhost` host), and makes no
 //! network request. Tauri sees `tauri://localhost/...` wherever it looks
 //! (the webview's URL, page loads, navigations, the IPC `Origin`).
+//!
+//! An app page the runtime cannot route (no `tauri` handler for its
+//! webview yet, or a load Servo makes for no webview, which reaches the
+//! runtime's `ServoDelegate`) gets an error response: left to Servo, it
+//! would be fetched from whatever local server answers on
+//! `tauri.localhost`, port 80, as the app's own origin.
 
 use std::borrow::Cow;
 use std::cell::{Cell, RefCell};
@@ -38,7 +44,7 @@ use servo::protocol_handler::{
     DoneChannel, FetchContext, HttpStatus, NetworkError, ProtocolHandler, ProtocolRegistry,
     Request, ResourceFetchTiming, Response, ResponseBody,
 };
-use servo::{WebResourceLoad, WebResourceResponse, WebViewId};
+use servo::{ServoDelegate, WebResourceLoad, WebResourceResponse, WebViewId};
 use url::Url;
 
 /// Tauri's handler for one scheme, as `PendingWebview` carries it.
@@ -166,29 +172,35 @@ impl SchemeHandlers {
     }
 
     /// Answers a load of an app page (`http://tauri.localhost/...`) with
-    /// Tauri's `tauri` handler; any other load is left to Servo. Main thread.
-    pub fn intercept(&self, webview: WebViewId, load: WebResourceLoad) {
+    /// Tauri's `tauri` handler; any other load is left to Servo. `webview`
+    /// is the one the load is for, `None` for a load Servo makes for no
+    /// webview (its `ServoDelegate`). Main thread.
+    ///
+    /// An app page the runtime cannot route is refused with an error
+    /// response, never left to Servo: Servo would fetch
+    /// `http://tauri.localhost/...` from the network, where `.localhost`
+    /// resolves to this machine, and any local server on port 80 would be
+    /// served as the app's own origin.
+    pub fn intercept(&self, webview: Option<WebViewId>, load: WebResourceLoad) {
+        let (label, handler, post, uri) = match self.route(webview, &load.request().url) {
+            AppRoute::NotAnAppPage => return, // dropping the load lets Servo fetch it
+            AppRoute::Refused(reason) => {
+                log::warn!("app page {} refused: {reason}", load.request().url);
+                refuse_app_load(load);
+                return;
+            }
+            AppRoute::Handler {
+                label,
+                handler,
+                post,
+                uri,
+            } => (label, handler, post, uri),
+        };
         let request = load.request();
-        if !is_app_url(&request.url) {
-            return; // dropping the load lets Servo fetch it
-        }
-        let Some(post) = self.0.read().unwrap().post.clone() else {
-            return;
-        };
-        let Some((label, handler)) = self.find("tauri", Some(webview)) else {
-            log::warn!("no `tauri` handler for {}", request.url);
-            return;
-        };
         let mut tauri_request = http::Request::new(Vec::new());
         *tauri_request.method_mut() = request.method.clone();
         *tauri_request.headers_mut() = request.headers.clone();
-        match to_tauri_url(request.url.clone()).as_str().parse() {
-            Ok(uri) => *tauri_request.uri_mut() = uri,
-            Err(error) => {
-                log::warn!("{} is not a valid request URI: {error}", request.url);
-                return;
-            }
-        }
+        *tauri_request.uri_mut() = uri;
 
         // The load is not `Send` and the answer may come from any thread:
         // the load waits on the main thread, the answer is posted there.
@@ -203,6 +215,33 @@ impl SchemeHandlers {
             tauri_request,
             Box::new(move |response| post(Box::new(move || finish_app_load(id, response)))),
         );
+    }
+
+    /// Who answers a load of `url` made for `webview`.
+    fn route(&self, webview: Option<WebViewId>, url: &Url) -> AppRoute {
+        if !is_app_url(url) {
+            return AppRoute::NotAnAppPage;
+        }
+        // Tauri checks a request's permissions by the webview label it is
+        // handed: a load for no webview has none to give it.
+        let Some(webview) = webview else {
+            return AppRoute::Refused("the load is for no webview".into());
+        };
+        let Some(post) = self.0.read().unwrap().post.clone() else {
+            return AppRoute::Refused("Servo's URI schemes are not set up yet".into());
+        };
+        let Some((label, handler)) = self.find("tauri", Some(webview)) else {
+            return AppRoute::Refused("no `tauri` handler for its webview".into());
+        };
+        match to_tauri_url(url.clone()).as_str().parse() {
+            Ok(uri) => AppRoute::Handler {
+                label,
+                handler,
+                post,
+                uri,
+            },
+            Err(error) => AppRoute::Refused(format!("not a valid request URI: {error}")),
+        }
     }
 
     /// The label and handler for a request: the target webview's. A request
@@ -229,7 +268,8 @@ impl SchemeHandlers {
                 Some((label.clone(), handler.clone()))
             }
             None => {
-                log::warn!(
+                // The caller logs the refusal.
+                log::debug!(
                     "{scheme}: request without a known webview, and {} webviews have this \
                      scheme: refused",
                     by_label.len()
@@ -238,6 +278,32 @@ impl SchemeHandlers {
             }
         }
     }
+}
+
+/// The runtime's `ServoDelegate`: Servo offers it the loads made for no
+/// webview, which would otherwise go to the network unasked. App pages
+/// among them are refused ([`SchemeHandlers::intercept`]).
+pub struct AppPageGuard(pub SchemeHandlers);
+
+impl ServoDelegate for AppPageGuard {
+    fn load_web_resource(&self, load: WebResourceLoad) {
+        self.0.intercept(None, load);
+    }
+}
+
+/// Who answers a load Servo offers the runtime ([`SchemeHandlers::route`]).
+enum AppRoute {
+    /// Not an app page: Servo fetches it.
+    NotAnAppPage,
+    /// An app page, for Tauri's `tauri` handler of webview `label`.
+    Handler {
+        label: String,
+        handler: Arc<UriSchemeHandler>,
+        post: MainThreadPoster,
+        uri: http::Uri,
+    },
+    /// An app page nothing here can answer, and why.
+    Refused(String),
 }
 
 /// Servo's handler for one scheme: hands the request to Tauri's handler
@@ -373,6 +439,31 @@ fn finish_app_load(id: u64, response: http::Response<Cow<'static, [u8]>>) {
     intercepted.finish();
 }
 
+/// The answer to an app page the runtime cannot route.
+fn refusal(url: Url) -> (WebResourceResponse, Vec<u8>) {
+    let status = http::StatusCode::INTERNAL_SERVER_ERROR;
+    let mut headers = http::HeaderMap::new();
+    headers.insert(
+        http::header::CONTENT_TYPE,
+        HeaderValue::from_static("text/plain; charset=utf-8"),
+    );
+    let response = WebResourceResponse::new(url)
+        .status_code(status)
+        .status_message(status.canonical_reason().unwrap_or_default().into())
+        .headers(headers);
+    (
+        response,
+        b"This page of the app could not be loaded.".to_vec(),
+    )
+}
+
+fn refuse_app_load(load: WebResourceLoad) {
+    let (response, body) = refusal(load.request().url.clone());
+    let mut intercepted = load.intercept(response);
+    intercepted.send_body_data(body);
+    intercepted.finish();
+}
+
 fn to_servo_response(
     url: servo::ServoUrl,
     timing: ResourceFetchTiming,
@@ -437,6 +528,77 @@ mod tests {
 
     fn handler() -> Box<UriSchemeHandler> {
         Box::new(|_, _, _| {})
+    }
+
+    fn app_url() -> Url {
+        Url::parse("http://tauri.localhost/index.html").unwrap()
+    }
+
+    fn webview_id() -> WebViewId {
+        servo_base::id::TEST_WEBVIEW_ID
+    }
+
+    fn assert_refused(route: AppRoute) {
+        match route {
+            AppRoute::Refused(_) => {}
+            AppRoute::NotAnAppPage => panic!("an app page was left to Servo's network fetch"),
+            AppRoute::Handler { label, .. } => panic!("an app page was sent to {label}"),
+        }
+    }
+
+    #[test]
+    fn an_app_page_before_servo_is_built_is_refused() {
+        let schemes = SchemeHandlers::default();
+        schemes.add_webview("main", HashMap::from([("tauri".to_owned(), handler())]));
+        assert_refused(schemes.route(Some(webview_id()), &app_url()));
+    }
+
+    #[test]
+    fn an_app_page_without_a_tauri_handler_is_refused() {
+        let schemes = SchemeHandlers::default();
+        schemes.add_webview("main", HashMap::from([("ipc".to_owned(), handler())]));
+        drop(schemes.registry(Arc::new(|_| {})));
+        assert_refused(schemes.route(Some(webview_id()), &app_url()));
+    }
+
+    #[test]
+    fn an_app_page_for_no_webview_is_refused() {
+        let schemes = SchemeHandlers::default();
+        schemes.add_webview("main", HashMap::from([("tauri".to_owned(), handler())]));
+        drop(schemes.registry(Arc::new(|_| {})));
+        assert_refused(schemes.route(None, &app_url()));
+    }
+
+    #[test]
+    fn an_app_page_with_a_handler_goes_to_it() {
+        let schemes = SchemeHandlers::default();
+        schemes.add_webview("main", HashMap::from([("tauri".to_owned(), handler())]));
+        drop(schemes.registry(Arc::new(|_| {})));
+        match schemes.route(Some(webview_id()), &app_url()) {
+            AppRoute::Handler { label, uri, .. } => {
+                assert_eq!(label, "main");
+                assert_eq!(uri, "tauri://localhost/index.html");
+            }
+            _ => panic!("the app page was not sent to its webview's handler"),
+        }
+    }
+
+    #[test]
+    fn other_pages_are_left_to_servo() {
+        let schemes = SchemeHandlers::default();
+        let url = Url::parse("http://tauri.localhost:8080/").unwrap();
+        assert!(matches!(schemes.route(None, &url), AppRoute::NotAnAppPage));
+    }
+
+    #[test]
+    fn a_refused_app_page_gets_an_error_response() {
+        let (response, body) = refusal(app_url());
+        assert_eq!(
+            response.status_code,
+            http::StatusCode::INTERNAL_SERVER_ERROR
+        );
+        assert_eq!(response.url, app_url());
+        assert!(!body.is_empty());
     }
 
     #[test]
