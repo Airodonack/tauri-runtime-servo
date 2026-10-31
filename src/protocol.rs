@@ -205,9 +205,12 @@ impl SchemeHandlers {
         );
     }
 
-    /// The label and handler for a request: the target webview's, or, for a
-    /// request no webview is named on (a worker's), the first webview's
-    /// that has this scheme.
+    /// The label and handler for a request: the target webview's. A request
+    /// that names no webview Tauri knows of (one that arrives before the
+    /// webview's id is recorded, or one Servo made for no webview) goes to
+    /// the only webview with this scheme, and to none when there are
+    /// several: Tauri checks a request's permissions by the label it is
+    /// handed, so a guess could grant one webview's page another's.
     fn find(
         &self,
         scheme: &str,
@@ -220,10 +223,18 @@ impl SchemeHandlers {
             Some(label) => by_label
                 .get(label)
                 .map(|handler| (label.clone(), handler.clone())),
-            None => {
+            None if by_label.len() == 1 => {
                 let (label, handler) = by_label.iter().next()?;
                 log::debug!("{scheme}: request without a known webview, sent to {label}");
                 Some((label.clone(), handler.clone()))
+            }
+            None => {
+                log::warn!(
+                    "{scheme}: request without a known webview, and {} webviews have this \
+                     scheme: refused",
+                    by_label.len()
+                );
+                None
             }
         }
     }
@@ -418,4 +429,32 @@ async fn read_body(
         }
     }
     Err("the body stream ended without its last chunk".into())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn handler() -> Box<UriSchemeHandler> {
+        Box::new(|_, _, _| {})
+    }
+
+    #[test]
+    fn a_request_without_a_webview_goes_to_the_only_one() {
+        let schemes = SchemeHandlers::default();
+        schemes.add_webview("main", HashMap::from([("ipc".to_owned(), handler())]));
+        let (label, _) = schemes
+            .find("ipc", None)
+            .expect("the only webview's handler");
+        assert_eq!(label, "main");
+    }
+
+    #[test]
+    fn a_request_without_a_webview_is_refused_when_several_could_take_it() {
+        let schemes = SchemeHandlers::default();
+        schemes.add_webview("trusted", HashMap::from([("ipc".to_owned(), handler())]));
+        schemes.add_webview("remote", HashMap::from([("ipc".to_owned(), handler())]));
+        let found = schemes.find("ipc", None).map(|(label, _)| label);
+        assert_eq!(found, None);
+    }
 }
