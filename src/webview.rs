@@ -345,7 +345,10 @@ impl WebViewDelegate for Delegate {
         level: servo::ConsoleLogLevel,
         message: String,
     ) {
-        log::info!(target: "console", "{level:?}: {message}");
+        // At debug: the page's console can carry anything the page knows,
+        // and an app's log (tauri-plugin-log writes info and up to a file)
+        // is no place for it. `RUST_LOG=console=debug` shows it.
+        log::debug!(target: "console", "{level:?}: {message}");
     }
 }
 
