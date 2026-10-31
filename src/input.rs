@@ -151,9 +151,11 @@ fn wheel(webview: &WebView, point: DevicePoint, x: f64, y: f64) {
 /// `target` gives the webview and its place in the window (physical
 /// pixels), or `None` once it is gone.
 pub fn connect_discrete_scroll(
-    gtk_window: &gtk::ApplicationWindow,
+    window: &tao::window::Window,
     target: impl Fn() -> Option<(WebView, (i32, i32, u32, u32))> + 'static,
 ) {
+    use tao::platform::unix::WindowExtUnix;
+    let gtk_window = window.gtk_window();
     gtk_window.connect_scroll_event(move |gtk_window, event| {
         // Same sign as tao's smooth deltas (and winit's): up is positive.
         let (x, y) = match event.direction() {
