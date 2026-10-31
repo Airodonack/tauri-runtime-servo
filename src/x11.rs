@@ -78,13 +78,24 @@ pub struct ChildWindow {
 }
 
 impl ChildWindow {
+    /// A child window of `window`'s toplevel at `x`, `y` (physical pixels,
+    /// from the client area's top-left corner), the page's surface. The
+    /// rest of the crate sees only this type: what the windowing system is
+    /// stays in this module.
     pub fn new(
-        parent: &gtk::gdk::Window,
+        window: &tao::window::Window,
         x: i32,
         y: i32,
         width: u32,
         height: u32,
     ) -> Result<ChildWindow, String> {
+        use tao::platform::unix::WindowExtUnix;
+        // A hidden window has no GdkWindow until it is realized.
+        let gtk_window = window.gtk_window();
+        if !gtk_window.is_realized() {
+            gtk_window.realize();
+        }
+        let parent = gtk_window.window().ok_or("the window has no GdkWindow")?;
         let parent_xid = parent
             .downcast_ref::<gdkx11::X11Window>()
             .ok_or("the window is not an X11 window (Wayland is not supported yet)")?

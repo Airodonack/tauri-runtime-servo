@@ -11,7 +11,6 @@ use std::sync::mpsc::{Sender, channel};
 use std::sync::{Arc, Mutex};
 
 use euclid::Scale;
-use gtk::prelude::*;
 use servo::{
     EmbedderControl, EmbedderControlId, JSValue, JavaScriptEvaluationError, LoadStatus,
     NavigationRequest, RenderingContext, Theme as ServoTheme, UserContentManager, UserScript,
@@ -416,15 +415,7 @@ pub fn create_webview<T: UserEvent>(
         },
     };
 
-    // A hidden window has no GdkWindow until it is realized.
-    let gtk_window = window.gtk_window();
-    if !gtk_window.is_realized() {
-        gtk_window.realize();
-    }
-    let gdk_window = gtk_window
-        .window()
-        .ok_or_else(|| Error::CreateWebview("the window has no GdkWindow".into()))?;
-    let surface = ChildWindow::new(&gdk_window, bounds.x, bounds.y, bounds.width, bounds.height)
+    let surface = ChildWindow::new(window, bounds.x, bounds.y, bounds.width, bounds.height)
         .map_err(|e| Error::CreateWebview(e.into()))?;
     let rendering_context = Rc::new(
         WindowRenderingContext::new(
@@ -483,7 +474,7 @@ pub fn create_webview<T: UserEvent>(
         dialogs,
     });
     let weak = Rc::downgrade(&inner);
-    input::connect_discrete_scroll(gtk_window, move || {
+    input::connect_discrete_scroll(window, move || {
         let inner = weak.upgrade()?;
         let b = inner.bounds.get();
         Some((inner.webview.clone(), (b.x, b.y, b.width, b.height)))
