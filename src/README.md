@@ -25,7 +25,7 @@ A dispatcher call made on the main thread runs at once; from anywhere else it is
 | `window.rs` | Windows: Tauri's window builder over tao's, the window messages and `WindowDispatch`, window creation (adapted from tauri-runtime-wry). |
 | `webview.rs` | Webviews: a Servo `WebView` on an X11 child window, its delegate (loads, navigation, dialogs, console), initialization scripts, `eval` results as JSON, the webview messages and `WebviewDispatch`. |
 | `protocol.rs` | Tauri's URI schemes (`ipc`, `tauri`, `asset`, the plugins') as Servo protocol handlers, and the app's pages served as `http://tauri.localhost` through request interception; an app page it cannot route, or one Servo loads for no webview (the runtime's Servo delegate), gets an error response instead of a network fetch. |
-| `x11.rs` | The webview's native surface: an X11 child window that takes no input, with the visual Servo's EGL config needs. |
+| `x11.rs` | The webview's native surface: an X11 child window that takes no input, with the visual Servo's EGL config needs; and the page area of the window's GTK box (below a menu bar) that the window's page is placed on. |
 | `input.rs` | tao's pointer, wheel and key events converted to Servo input events (after servoshell). |
 | `dialog.rs` | The page's `alert()`, `confirm()` and `prompt()` as GTK message dialogs, which WebDriver can also answer. |
 | `monitor.rs` | tao's monitors as Tauri's `Monitor`, work areas and centring (adapted from tauri-runtime-wry). |

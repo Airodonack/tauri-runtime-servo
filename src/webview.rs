@@ -30,7 +30,7 @@ use crate::input;
 use crate::protocol::{SchemeHandlers, to_servo_url, to_tauri_url};
 use crate::runtime::{Context, Message, ServoRuntime, WebviewId};
 use crate::webdriver::WebDriver;
-use crate::x11::ChildWindow;
+use crate::x11::{ChildWindow, PageArea};
 
 pub type WebviewEventHandler = Box<dyn Fn(&WebviewEvent) + Send>;
 pub type WebviewEventListeners = Arc<Mutex<HashMap<WebviewEventId, WebviewEventHandler>>>;
@@ -50,7 +50,7 @@ pub enum WebviewKind {
 }
 
 /// The webview's place in its window, in physical pixels.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Bounds {
     pub x: i32,
     pub y: i32,
@@ -76,6 +76,10 @@ pub struct ServoWebview {
     pub schemes: SchemeHandlers,
     /// The page's dialogs on screen, which WebDriver answers as prompts.
     pub dialogs: Rc<OpenDialogs>,
+    /// For the window's content, the part of the window's GTK box below a
+    /// menu bar, which the page follows; `None` for a child webview, placed
+    /// by its bounds, and in a window without a GTK box.
+    pub page_area: Option<PageArea>,
 }
 
 impl Drop for ServoWebview {
@@ -396,6 +400,10 @@ pub fn create_webview<T: UserEvent>(
     let url = to_servo_url(Url::parse(&url).map_err(|e| Error::CreateWebview(Box::new(e)))?);
     let scale_factor = window.scale_factor();
     let inner_size = window.inner_size();
+    let page_area = match kind {
+        WebviewKind::WindowContent => PageArea::new(window),
+        WebviewKind::WindowChild => None,
+    };
     let bounds = match (kind, attributes.bounds) {
         (WebviewKind::WindowChild, Some(Rect { position, size })) => {
             let position = position.to_physical::<i32>(scale_factor);
@@ -407,11 +415,21 @@ pub fn create_webview<T: UserEvent>(
                 height: size.height,
             }
         }
-        _ => Bounds {
-            x: 0,
-            y: 0,
-            width: inner_size.width,
-            height: inner_size.height,
+        // The whole window until GTK has laid the page area out; then the
+        // area's callback below moves the page into it.
+        _ => match page_area.as_ref().and_then(PageArea::geometry) {
+            Some((x, y, width, height)) => Bounds {
+                x,
+                y,
+                width,
+                height,
+            },
+            None => Bounds {
+                x: 0,
+                y: 0,
+                width: inner_size.width,
+                height: inner_size.height,
+            },
         },
     };
 
@@ -472,7 +490,27 @@ pub fn create_webview<T: UserEvent>(
         label: label.clone(),
         schemes: context.schemes.clone(),
         dialogs,
+        page_area,
     });
+    if let Some(area) = &inner.page_area {
+        let webview = Rc::downgrade(&inner);
+        let window = Rc::downgrade(window);
+        area.connect_moved(move |(x, y, width, height)| {
+            let (Some(webview), Some(window)) = (webview.upgrade(), window.upgrade()) else {
+                return;
+            };
+            let bounds = Bounds {
+                x,
+                y,
+                width,
+                height,
+            };
+            if webview.bounds.get() != bounds {
+                webview.set_bounds(bounds);
+                window.request_redraw();
+            }
+        });
+    }
     let weak = Rc::downgrade(&inner);
     input::connect_discrete_scroll(window, move || {
         let inner = weak.upgrade()?;

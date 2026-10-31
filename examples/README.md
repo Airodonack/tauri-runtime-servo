@@ -10,6 +10,7 @@ From the repository root (the [root README](../README.md) lists what the build n
 export CC=clang CXX=clang++
 cargo run --release -p helloworld                              # development mode: the page from a loopback server
 cargo run --release -p helloworld --features custom-protocol   # production mode: the page from tauri://localhost
+cargo run --release -p menubar                                 # a window with a menu bar above the page
 ```
 
 The first build compiles Servo; later ones only the runtime and the app.
@@ -19,3 +20,4 @@ The first build compiles Servo; later ones only the runtime and the app.
 | Folder | What it holds |
 |---|---|
 | [`helloworld/`](helloworld/README.md) | Tauri's hello world, extended to exercise every IPC surface an app uses (commands of each kind, events, a plugin, `eval`), printing a `RESULT` line for each check. |
+| [`menubar/`](menubar/README.md) | A window with a menu bar from Tauri's menu API: checks that the page starts below the bar and follows it when the bar is hidden or shown, and that the menu's items reach the app, printing a `RESULT` line for each check. |

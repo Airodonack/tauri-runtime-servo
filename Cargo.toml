@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = [".", "examples/helloworld"]
+members = [".", "examples/helloworld", "examples/menubar"]
 
 # The fork's layout reads style properties (`scrollbar-width`,
 # `scrollbar-color`, `scrollbar-gutter`, `accent-color`, `text-overflow`)

@@ -13,6 +13,9 @@ under the closing "Fixes" bullet.
   scripts and `eval` with its result.
 - The page's `alert()`, `confirm()` and `prompt()` open as dialogs over the
   window.
+- A window's menu bar from Tauri's menu API sits above the page, as on
+  wry, and the page moves up and down with it when the bar is hidden or
+  shown.
 - The page's storage and cookies are kept in the app's local data folder.
 - End-to-end tests can drive an app over WebDriver in builds with the
   `webdriver` feature; the WebDriver server answers on this machine only

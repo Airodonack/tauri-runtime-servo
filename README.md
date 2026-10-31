@@ -46,6 +46,7 @@ Early, and working for the app it was written for: version 0.1.0, run by VODscri
 Works:
 
 - windows and their getters and setters, through tao as with wry on Linux; several windows; child webviews placed by bounds;
+- menus through Tauri's menu API: the window's menu bar sits above the page, which moves with it when the bar is hidden or shown;
 - Tauri's IPC: commands (sync, async, failing, raw bytes with headers), events, plugins' JavaScript APIs, capabilities and the ACL;
 - the app's own pages on `tauri://localhost` (production builds) and a `devUrl` (development);
 - initialization scripts, `eval` with its result as JSON, page load events, navigation policy, title changes;
@@ -161,7 +162,7 @@ fn main() {
 ## How it fits Tauri and Servo
 
 - **Tauri** talks to a runtime through the `tauri-runtime` traits (`Runtime`, `RuntimeHandle`, `WindowDispatch`, `WebviewDispatch`). They are marked unstable, so this crate pins `tauri-runtime` and `tauri-utils` exactly and moves with Tauri deliberately, one minor version at a time. The window and dispatcher plumbing is adapted from `tauri-runtime-wry` 2.12.1, so windows behave as they do under wry.
-- **Windows** are tao windows (GTK 3), so menus, dialogs' parents and anything a plugin reaches through the GTK window work unchanged. Servo paints into an X11 child window of the toplevel through EGL; the child takes no input, and the runtime forwards GTK's pointer and key events to Servo.
+- **Windows** are tao windows (GTK 3), so menus, dialogs' parents and anything a plugin reaches through the GTK window work as on wry. Servo paints into an X11 child window of the toplevel through EGL, placed on the part of the window's GTK box that the page owns: below a menu bar, which Tauri packs into the same box, and following it as the window is resized or the bar is shown or hidden (wry puts its WebKitGTK widget in that box the same way). The child takes no input, and the runtime forwards GTK's pointer and key events to Servo.
 - **IPC** is the part that differs most. Tauri's `ipc://`, `tauri://`, `asset://` and the plugins' schemes become Servo protocol handlers that call Tauri's handlers on the main thread, as WebKitGTK does. The app's pages load as `http://tauri.localhost/` (wry's URL on Windows) and are answered by Tauri's `tauri` handler through Servo's request interception, because a page on a custom scheme gets an opaque origin in Servo (no storage). Tauri still sees `tauri://localhost` everywhere it looks. An app page the runtime cannot hand to Tauri gets an error response; it never goes to the network, where `tauri.localhost` would reach whatever local server listens on port 80.
 - **Servo** is one instance for the process, built at the first webview: its protocol registry and data directory are fixed then. It is the Airodonack fork of Servo 0.7.0, which adds Media Source Extensions over GStreamer's mselib; the plan is to follow upstream releases and drop the fork as the work lands upstream.
 
@@ -176,7 +177,7 @@ Next, roughly in order: the embedder controls (`<select>`, file and colour picke
 
 ## Reporting problems and contributing
 
-Open an issue on [Airodonack/tauri-runtime-servo](https://github.com/Airodonack/tauri-runtime-servo/issues) with the Tauri version, the log with `RUST_LOG=warn,tauri_runtime_servo=debug`, and the smallest page or app that shows it. Bugs in Servo itself belong with [Servo](https://github.com/servo/servo) when they reproduce in servoshell; mention them here too if they block an app. Pull requests are welcome: run the checks in [.github/workflows/check.yml](.github/workflows/check.yml) first (`cargo fmt -p tauri-runtime-servo -p helloworld -- --check`, `cargo clippy --release --workspace --all-targets --all-features -- -D warnings`, `cargo test --release -p tauri-runtime-servo --features devtools`). Never `cargo fmt --all` here: it would reformat the Servo checkout the path dependencies point at.
+Open an issue on [Airodonack/tauri-runtime-servo](https://github.com/Airodonack/tauri-runtime-servo/issues) with the Tauri version, the log with `RUST_LOG=warn,tauri_runtime_servo=debug`, and the smallest page or app that shows it. Bugs in Servo itself belong with [Servo](https://github.com/servo/servo) when they reproduce in servoshell; mention them here too if they block an app. Pull requests are welcome: run the checks in [.github/workflows/check.yml](.github/workflows/check.yml) first (`cargo fmt -p tauri-runtime-servo -p helloworld -p menubar -- --check`, `cargo clippy --release --workspace --all-targets --all-features -- -D warnings`, `cargo test --release -p tauri-runtime-servo --features devtools`). Never `cargo fmt --all` here: it would reformat the Servo checkout the path dependencies point at.
 
 ## Licence and acknowledgements
 
@@ -189,14 +190,14 @@ The window, monitor and dispatcher plumbing is adapted from [tauri-runtime-wry](
 | Path | What it holds |
 |---|---|
 | [`src/`](src/README.md) | The runtime's source: event loop, windows, webviews, IPC schemes, input, dialogs, WebDriver. Start there to see how it works. |
-| [`examples/`](examples/README.md) | Runnable Tauri apps on this runtime; `helloworld` exercises every IPC surface and prints a `RESULT` line for each. |
+| [`examples/`](examples/README.md) | Runnable Tauri apps on this runtime; `helloworld` exercises every IPC surface and prints a `RESULT` line for each, `menubar` checks that a window's menu bar sits above the page. |
 | [`docs/`](docs/README.md) | Images the READMEs use (the helloworld screenshot). |
 | [`.github/workflows/`](.github/workflows/README.md) | CI: formatting, lints, tests and the example's build on Ubuntu. |
 | [`.cargo/`](.cargo/README.md) | Cargo configuration for this workspace (`RUSTC_BOOTSTRAP` for mozjs and Servo's script crates). |
-| `Cargo.toml` | The crate and the workspace (with the example), its pinned Tauri and Servo dependencies, the Stylo patch block, the features. |
+| `Cargo.toml` | The crate and the workspace (with the examples), its pinned Tauri and Servo dependencies, the Stylo patch block, the features. |
 | `Cargo.lock` | The exact dependency versions the checks ran with. |
 | `rust-toolchain.toml` | The Rust toolchain, 1.97.1: the one the Servo fork is built with. |
 | `CHANGELOG.md` | What changed in each release, for someone using the crate. |
 | `LICENSE-APACHE`, `LICENSE-MIT` | The two licences, at your option. |
 | `NOTICE` | The copyright of the tauri-runtime-wry code this crate adapts. |
-| `.gitignore` | Keeps build output, scratch files and the example's generated schemas out of git. |
+| `.gitignore` | Keeps build output, scratch files and the examples' generated schemas out of git. |
