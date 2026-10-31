@@ -91,8 +91,10 @@ jobs:
           RUSTDOCFLAGS: -D warnings
         run: cargo doc --release --no-deps -p tauri-runtime-servo --features devtools
 
+      # The ignored tests need an X display (one GTK start per process);
+      # Xvfb gives them one.
       - name: Tests
-        run: xvfb-run -a cargo test --release -p tauri-runtime-servo --features devtools
+        run: xvfb-run -a cargo test --release -p tauri-runtime-servo --features devtools -- --include-ignored
 
       - name: The example
         run: cargo build --release -p helloworld

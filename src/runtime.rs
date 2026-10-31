@@ -1021,3 +1021,83 @@ impl<T: UserEvent> RuntimeHandle<T> for ServoRuntimeHandle<T> {
             ));
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use std::sync::atomic::AtomicBool;
+
+    use tauri_runtime::webview::WebviewAttributes;
+    use tauri_runtime::{Cookie, WebviewDispatch, WindowDispatch};
+    use tauri_utils::config::WebviewUrl;
+
+    use super::*;
+
+    fn is_unsupported<V>(result: Result<V>) -> bool {
+        matches!(&result, Err(Error::CreateWebview(e)) if e.to_string().contains("not supported"))
+    }
+
+    /// The runtime's contract in Tauri's terms, through the handles Tauri
+    /// holds, for windows and webviews that do not exist: no window is made,
+    /// so Servo is never built and nothing is drawn. GTK starts once per
+    /// process, so one test builds the runtime and checks all of it.
+    #[test]
+    #[ignore = "needs an X display: run under xvfb-run with --include-ignored"]
+    fn the_runtime_keeps_tauri_s_contract() {
+        let runtime = ServoRuntime::<()>::new_any_thread(RuntimeInitArgs::default())
+            .expect("the runtime starts");
+        let context = runtime.context.clone();
+        let webview = ServoWebviewDispatcher {
+            window_id: WindowId::from(0),
+            webview_id: 0,
+            context: context.clone(),
+        };
+
+        // What Servo cannot do is refused with an error, never a silent Ok.
+        assert!(is_unsupported(webview.reparent(WindowId::from(1))));
+        assert!(is_unsupported(webview.print()));
+        assert!(is_unsupported(webview.cookies()));
+        assert!(is_unsupported(
+            webview.cookies_for_url("http://tauri.localhost/".parse().unwrap())
+        ));
+        assert!(is_unsupported(webview.set_cookie(Cookie::new("a", "b"))));
+        assert!(is_unsupported(webview.delete_cookie(Cookie::new("a", "b"))));
+        assert!(is_unsupported(webview.clear_all_browsing_data()));
+        assert!(is_unsupported(webview.set_background_color(None)));
+        #[cfg(any(debug_assertions, feature = "devtools"))]
+        assert!(matches!(webview.is_devtools_open(), Ok(false)));
+
+        // A getter on a webview or window that is gone fails; it never hangs.
+        assert!(matches!(webview.url(), Err(Error::FailedToReceiveMessage)));
+        assert!(matches!(
+            webview.bounds(),
+            Err(Error::FailedToReceiveMessage)
+        ));
+        assert!(matches!(webview.size(), Err(Error::FailedToReceiveMessage)));
+        let window = ServoWindowDispatcher {
+            window_id: WindowId::from(0),
+            context: context.clone(),
+        };
+        assert!(matches!(window.title(), Err(Error::FailedToReceiveMessage)));
+        assert!(matches!(
+            window.inner_size(),
+            Err(Error::FailedToReceiveMessage)
+        ));
+
+        // A webview for a window that does not exist is refused.
+        let pending =
+            PendingWebview::new(WebviewAttributes::new(WebviewUrl::default()), "child").unwrap();
+        assert!(matches!(
+            runtime.create_webview(WindowId::from(7), pending),
+            Err(Error::WindowNotFound)
+        ));
+
+        // On the main thread, `run_on_main_thread` runs the task at once.
+        let ran = Arc::new(AtomicBool::new(false));
+        let flag = ran.clone();
+        runtime
+            .handle()
+            .run_on_main_thread(move || flag.store(true, Ordering::SeqCst))
+            .unwrap();
+        assert!(ran.load(Ordering::SeqCst));
+    }
+}

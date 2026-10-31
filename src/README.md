@@ -16,6 +16,10 @@ A dispatcher call made on the main thread runs at once; from anywhere else it is
 4. `protocol.rs`: Tauri's IPC and the app's `tauri://localhost` pages.
 5. The rest as needed: windows, input, the X11 surface, dialogs, WebDriver.
 
+## Tests
+
+Each file's unit tests sit at its end, in a `tests` module. They cover the pure conversions, which run without a display or Servo: window and monitor geometry at several scale factors (`window.rs`, `monitor.rs`), keys, modifiers and pointer points (`input.rs`), the app's URLs, the IPC request, its `Origin` header and the scheme routing (`protocol.rs`), `eval` results as JSON and the initialization-script wrapper (`webview.rs`). The code that calls tao, GTK or libservo stays thin around them. One test in `runtime.rs` builds the runtime and checks the dispatchers' contract in Tauri's terms (unsupported methods return errors, getters on a gone window fail rather than hang); GTK needs a display for it, so it is `#[ignore]`d and run with `xvfb-run cargo test ... -- --include-ignored`. What only a running Servo shows is the example's [smoke test](../examples/helloworld/README.md#the-smoke-test).
+
 ## What is in this directory
 
 | File | What it holds |
