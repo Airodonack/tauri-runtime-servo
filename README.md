@@ -41,7 +41,7 @@ flowchart TB
 
 ## Status
 
-Early, and working for the app it was written for: version 0.1.0, run by VODscribe's Servo build. Everything listed as working has been run on Linux under X11, on a desktop and headless under Xvfb; a few unit tests cover the pieces that run without a display.
+Early, and working for the app it was written for: version 0.1.0, run by VODscribe's Servo build. Everything listed as working has been run on Linux under X11, on a desktop and headless under Xvfb. Unit tests cover the conversions that need no display (geometry and DPI, keys and mouse buttons, the app's URLs, IPC requests and headers, `eval` results); a contract test checks the dispatchers' errors under Xvfb; and CI runs the example headless and checks every `RESULT` line it prints (the [smoke test](examples/helloworld/README.md#the-smoke-test)).
 
 Works:
 
@@ -63,6 +63,13 @@ Does not work yet (each returns a `tauri_runtime::Error` or logs a warning):
 - `<select>` pickers, colour and file pickers, input methods and context menus (Servo asks for them; nothing is drawn, so the default answer is taken);
 - `window.open`, permission prompts (denied), HTTP authentication (cancelled), the page moving or resizing its window;
 - wry's `window.ipc.postMessage` fallback (Tauri only uses it when its `ipc://` request fails, which it does not here).
+
+Missing without an error or a warning:
+
+- drag and drop: `WindowEvent::DragDrop` and `WebviewEvent::DragDrop` never fire, so files dropped on a window do nothing;
+- the mouse cursor never changes shape (over links, text or resize handles, it stays the window's);
+- keys go only to a window's first webview, whichever has focus (`set_focus` on a child webview moves Servo's focus, not the keys);
+- 22 webview attributes are ignored: `user_agent`, `incognito`, `javascript_disabled`, `transparent`, `proxy_url`, `devtools`, `background_color`, `zoom_hotkeys_enabled`, `clipboard`, `drag_drop_handler_enabled`, `additional_browser_args`, `use_https_scheme` (app pages are always `http://tauri.localhost`), `background_throttling`, `scroll_bar_style`, `general_autofill_enabled`, `browser_extensions_enabled`, `extensions_path`, `data_store_identifier`, `accept_first_mouse`, `allow_link_preview`, `window_effects`, `traffic_light_position` (the ones used: the URL, initialization scripts, `data_directory`, `focus`, `bounds`, `auto_resize`).
 
 ## Requirements and platform support
 
@@ -177,7 +184,7 @@ Next, roughly in order: the embedder controls (`<select>`, file and colour picke
 
 ## Reporting problems and contributing
 
-Open an issue on [Airodonack/tauri-runtime-servo](https://github.com/Airodonack/tauri-runtime-servo/issues) with the Tauri version, the log with `RUST_LOG=warn,tauri_runtime_servo=debug`, and the smallest page or app that shows it. Bugs in Servo itself belong with [Servo](https://github.com/servo/servo) when they reproduce in servoshell; mention them here too if they block an app. Pull requests are welcome: run the checks in [.github/workflows/check.yml](.github/workflows/check.yml) first (`cargo fmt -p tauri-runtime-servo -p helloworld -p menubar -- --check`, `cargo clippy --release --workspace --all-targets --all-features -- -D warnings`, `cargo test --release -p tauri-runtime-servo --features devtools`). Never `cargo fmt --all` here: it would reformat the Servo checkout the path dependencies point at.
+Open an issue on [Airodonack/tauri-runtime-servo](https://github.com/Airodonack/tauri-runtime-servo/issues) with the Tauri version, the log with `RUST_LOG=warn,tauri_runtime_servo=debug`, and the smallest page or app that shows it. Bugs in Servo itself belong with [Servo](https://github.com/servo/servo) when they reproduce in servoshell; mention them here too if they block an app. Pull requests are welcome: run the checks in [.github/workflows/check.yml](.github/workflows/check.yml) first (`cargo fmt -p tauri-runtime-servo -p helloworld -p menubar -- --check`, `cargo clippy --release --workspace --all-targets --all-features -- -D warnings`, `xvfb-run -a cargo test --release -p tauri-runtime-servo --features devtools -- --include-ignored`, and after `cargo build --release -p helloworld`, `examples/helloworld/smoke-test.sh target/release/helloworld`). Never `cargo fmt --all` here: it would reformat the Servo checkout the path dependencies point at.
 
 ## Licence and acknowledgements
 
@@ -192,7 +199,7 @@ The window, monitor and dispatcher plumbing is adapted from [tauri-runtime-wry](
 | [`src/`](src/README.md) | The runtime's source: event loop, windows, webviews, IPC schemes, input, dialogs, WebDriver. Start there to see how it works. |
 | [`examples/`](examples/README.md) | Runnable Tauri apps on this runtime; `helloworld` exercises every IPC surface and prints a `RESULT` line for each, `menubar` checks that a window's menu bar sits above the page. |
 | [`docs/`](docs/README.md) | Images the READMEs use (the helloworld screenshot). |
-| [`.github/workflows/`](.github/workflows/README.md) | CI: formatting, lints, tests and the example's build on Ubuntu. |
+| [`.github/workflows/`](.github/workflows/README.md) | CI: formatting, lints, tests, the example's build on Ubuntu, and the example run headless as a smoke test. |
 | [`.cargo/`](.cargo/README.md) | Cargo configuration for this workspace (`RUSTC_BOOTSTRAP` for mozjs and Servo's script crates). |
 | `Cargo.toml` | The crate and the workspace (with the examples), its pinned Tauri and Servo dependencies, the Stylo patch block, the features. |
 | `Cargo.lock` | The exact dependency versions the checks ran with. |
