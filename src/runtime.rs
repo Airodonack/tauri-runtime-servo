@@ -173,8 +173,8 @@ impl<T: UserEvent> Context<T> {
             ..Default::default()
         };
         // Media Source Extensions exist in the fork's libservo only: set by
-        // name, so the crate also builds against libservo 0.7.0 as
-        // published, which has no such preference.
+        // name, so the crate also builds against libservo as published,
+        // which has no such preference.
         const MEDIA_SOURCE: &str = "dom_media_source_enabled";
         if Preferences::exists(MEDIA_SOURCE) {
             preferences.set_value(MEDIA_SOURCE, PrefValue::Bool(true));

@@ -2,5 +2,5 @@
 # The toolchain the Servo fork is built with (its own rust-toolchain.toml):
 # libservo and mozjs are tested on it, and a build shares Servo's compiled
 # artifacts only with the same compiler. Bump together with the fork.
-channel = "1.97.1"
+channel = "1.99.1"
 components = ["clippy", "rustfmt"]

@@ -28,7 +28,7 @@ flowchart TB
         wv["webviews: Servo WebView on an X11 child window,<br/>input forwarding, dialogs (webview.rs, x11.rs, input.rs)"]
         proto["Tauri's URI schemes as Servo protocol handlers<br/>(ipc://, tauri://, asset://, plugins') (protocol.rs)"]
     end
-    subgraph servo["libservo (Servo fork, 0.7.0 + MSE)"]
+    subgraph servo["libservo (Servo fork, main + MSE)"]
         engine["script, layout, WebRender painting,<br/>net, GStreamer media"]
     end
     app -- "tauri-runtime 2.12.1 traits" --> trs
@@ -78,10 +78,10 @@ Missing without an error or a warning:
 | Linux, X11 | yes | GTK 3 windows (tao 0.37); the webview is an X11 child window with an EGL surface |
 | Linux, Wayland | not yet | `GDK_BACKEND=x11` runs the app under XWayland |
 | macOS, Windows | not yet | `compile_error!` off Linux |
-| Rust | 1.97.1 | the toolchain the Servo fork is built with (`rust-toolchain.toml`); `RUSTC_BOOTSTRAP` for mozjs, see below |
+| Rust | 1.99.1 | the toolchain the Servo fork is built with (`rust-toolchain.toml`); `RUSTC_BOOTSTRAP` for mozjs, see below |
 | Tauri | 2.12 (`tauri` 2.12.3, `tauri-runtime` =2.12.1, `tauri-utils` =2.10.2) | the runtime traits are not semver-stable, so the pins are exact |
-| libservo | the [Airodonack/servo](https://github.com/Airodonack/servo) fork, branch `vodscribe/main` (Servo 0.7.0 + Media Source Extensions) | a path dependency for now, see [Using it](#using-it-in-a-tauri-app) |
-| Stylo | 0.22.0 plus the fork's style properties (branch `vodscribe/v0.22.0` of [Airodonack/stylo](https://github.com/Airodonack/stylo), a git dependency) | patched in by every consumer, see below |
+| libservo | the [Airodonack/servo](https://github.com/Airodonack/servo) fork, branch `vodscribe/main` (Servo main after 0.7.0, e10d0a00eb, + Media Source Extensions) | a path dependency for now, see [Using it](#using-it-in-a-tauri-app) |
+| Stylo | Servo's pinned Stylo (890aa121c) plus the fork's style properties (branch `vodscribe/main` of [Airodonack/stylo](https://github.com/Airodonack/stylo), a git dependency) | patched in by every consumer, see below |
 | GStreamer | 1.26 or newer to build (the Rust bindings for `gstreamer-mse-1.0` ask pkg-config for 1.26, though mselib itself is in gst-plugins-bad since 1.24); 1.28 recommended to run. Ubuntu 24.04 ships 1.24 and cannot build it; 26.04 ships 1.28 | media; the X11, EGL and GTK development packages are listed in [.github/workflows/check.yml](.github/workflows/check.yml) |
 | WebKitGTK 4.1 development files | build time only | `tauri` and `tauri-runtime` depend on `webkit2gtk` on Linux whatever the runtime; nothing of it is linked into the binary |
 
@@ -110,30 +110,30 @@ tauri = { version = "=2.12.3", default-features = false, features = ["compressio
 tauri-runtime-servo = { path = "../tauri-servo/tauri-runtime-servo" }
 ```
 
-**2. The Stylo patch.** The fork's layout reads style properties (`scrollbar-width`, `scrollbar-color`, `scrollbar-gutter`, `accent-color`, `text-overflow`) that stock Stylo 0.22.0 leaves out of Servo's style structs, so the build needs the fork's Stylo branch (`vodscribe/v0.22.0` of [Airodonack/stylo](https://github.com/Airodonack/stylo), servo/stylo v0.22.0 plus three commits: the scrollbar properties, `text-overflow` and `accent-color` ungated for Servo, and a UA-only `-servo-accent-color` keyword). Cargo applies `[patch]` only from the workspace a build starts in, never from a dependency, so your app's root `Cargo.toml` needs the same block this repository's has. All eleven crates of Stylo's workspace are patched together: patching `stylo` alone builds two copies of the shared ones, which do not fit together.
+**2. The Stylo patch.** The fork's layout reads style properties (`scrollbar-gutter`, `accent-color`) that the Stylo Servo pins (890aa121c) leaves out of Servo's style structs, so the build needs the fork's Stylo branch (`vodscribe/main` of [Airodonack/stylo](https://github.com/Airodonack/stylo), that Stylo plus two commits: `scrollbar-gutter` and `accent-color` compiled for Servo, and a UA-only `-servo-accent-color` keyword). Servo takes Stylo from its git repository, so the block patches that source, not crates.io. Cargo applies `[patch]` only from the workspace a build starts in, never from a dependency, so your app's root `Cargo.toml` needs the same block this repository's has. All eleven crates of Stylo's workspace are patched together: patching `stylo` alone builds two copies of the shared ones, which do not fit together.
 
 ```toml
-[patch.crates-io]
-selectors = { git = "https://github.com/Airodonack/stylo", rev = "b5c009c00c159d11d9c01f4c01957f4b2290b767" }
-servo_arc = { git = "https://github.com/Airodonack/stylo", rev = "b5c009c00c159d11d9c01f4c01957f4b2290b767" }
-stylo = { git = "https://github.com/Airodonack/stylo", rev = "b5c009c00c159d11d9c01f4c01957f4b2290b767" }
-stylo_atoms = { git = "https://github.com/Airodonack/stylo", rev = "b5c009c00c159d11d9c01f4c01957f4b2290b767" }
-stylo_derive = { git = "https://github.com/Airodonack/stylo", rev = "b5c009c00c159d11d9c01f4c01957f4b2290b767" }
-stylo_dom = { git = "https://github.com/Airodonack/stylo", rev = "b5c009c00c159d11d9c01f4c01957f4b2290b767" }
-stylo_malloc_size_of = { git = "https://github.com/Airodonack/stylo", rev = "b5c009c00c159d11d9c01f4c01957f4b2290b767" }
-stylo_static_prefs = { git = "https://github.com/Airodonack/stylo", rev = "b5c009c00c159d11d9c01f4c01957f4b2290b767" }
-stylo_traits = { git = "https://github.com/Airodonack/stylo", rev = "b5c009c00c159d11d9c01f4c01957f4b2290b767" }
-to_shmem = { git = "https://github.com/Airodonack/stylo", rev = "b5c009c00c159d11d9c01f4c01957f4b2290b767" }
-to_shmem_derive = { git = "https://github.com/Airodonack/stylo", rev = "b5c009c00c159d11d9c01f4c01957f4b2290b767" }
+[patch."https://github.com/servo/stylo"]
+selectors = { git = "https://github.com/Airodonack/stylo", rev = "e3320a1f1a72f2ed8aca91769b5edfb86c46a543" }
+servo_arc = { git = "https://github.com/Airodonack/stylo", rev = "e3320a1f1a72f2ed8aca91769b5edfb86c46a543" }
+stylo = { git = "https://github.com/Airodonack/stylo", rev = "e3320a1f1a72f2ed8aca91769b5edfb86c46a543" }
+stylo_atoms = { git = "https://github.com/Airodonack/stylo", rev = "e3320a1f1a72f2ed8aca91769b5edfb86c46a543" }
+stylo_derive = { git = "https://github.com/Airodonack/stylo", rev = "e3320a1f1a72f2ed8aca91769b5edfb86c46a543" }
+stylo_dom = { git = "https://github.com/Airodonack/stylo", rev = "e3320a1f1a72f2ed8aca91769b5edfb86c46a543" }
+stylo_malloc_size_of = { git = "https://github.com/Airodonack/stylo", rev = "e3320a1f1a72f2ed8aca91769b5edfb86c46a543" }
+stylo_static_prefs = { git = "https://github.com/Airodonack/stylo", rev = "e3320a1f1a72f2ed8aca91769b5edfb86c46a543" }
+stylo_traits = { git = "https://github.com/Airodonack/stylo", rev = "e3320a1f1a72f2ed8aca91769b5edfb86c46a543" }
+to_shmem = { git = "https://github.com/Airodonack/stylo", rev = "e3320a1f1a72f2ed8aca91769b5edfb86c46a543" }
+to_shmem_derive = { git = "https://github.com/Airodonack/stylo", rev = "e3320a1f1a72f2ed8aca91769b5edfb86c46a543" }
 ```
 
 Without it the build stops in `servo-layout` with ``no field `scrollbar_gutter` on type `&style::properties::style_structs::Box` ``.
 
-**3. The compiler settings.** mozjs and Servo's script crates use nightly features on the stable toolchain. Like the fork, put this in your app's `.cargo/config.toml` (Cargo reads it from where the build starts, not from dependencies), and use the fork's toolchain, 1.97.1 (a `rust-toolchain.toml` with `channel = "1.97.1"`):
+**3. The compiler settings.** mozjs and Servo's script crates use nightly features on the stable toolchain. Like the fork, put this in your app's `.cargo/config.toml` (Cargo reads it from where the build starts, not from dependencies), and use the fork's toolchain, 1.99.1 (a `rust-toolchain.toml` with `channel = "1.99.1"`):
 
 ```toml
 [env]
-RUSTC_BOOTSTRAP = "crown,script,script_webgpu,script_bindings,style_tests,mozjs,mozjs_sys"
+RUSTC_BOOTSTRAP = "crown,script,script_webcrypto,script_webgpu,script_bindings,style_tests,mozjs,mozjs_sys"
 ```
 
 **4. The builder.** Name the runtime in the builder's type:
@@ -170,7 +170,7 @@ fn main() {
 - **Tauri** talks to a runtime through the `tauri-runtime` traits (`Runtime`, `RuntimeHandle`, `WindowDispatch`, `WebviewDispatch`). They are marked unstable, so this crate pins `tauri-runtime` and `tauri-utils` exactly and moves with Tauri deliberately, one minor version at a time. The window and dispatcher plumbing is adapted from `tauri-runtime-wry` 2.12.1, so windows behave as they do under wry.
 - **Windows** are tao windows (GTK 3), so menus, dialogs' parents and anything a plugin reaches through the GTK window work as on wry. Servo paints into an X11 child window of the toplevel through EGL, placed on the part of the window's GTK box that the page owns: below a menu bar, which Tauri packs into the same box, and following it as the window is resized or the bar is shown or hidden (wry puts its WebKitGTK widget in that box the same way). The child takes no input, and the runtime forwards GTK's pointer and key events to Servo.
 - **IPC** is the part that differs most. Tauri's `ipc://`, `tauri://`, `asset://` and the plugins' schemes become Servo protocol handlers that call Tauri's handlers on the main thread, as WebKitGTK does. The app's pages load as `http://tauri.localhost/` (wry's URL on Windows) and are answered by Tauri's `tauri` handler through Servo's request interception, because a page on a custom scheme gets an opaque origin in Servo (no storage). Tauri still sees `tauri://localhost` everywhere it looks. An app page the runtime cannot hand to Tauri gets an error response; it never goes to the network, where `tauri.localhost` would reach whatever local server listens on port 80.
-- **Servo** is one instance for the process, built at the first webview: its protocol registry and data directory are fixed then. It is the Airodonack fork of Servo 0.7.0, which adds Media Source Extensions over GStreamer's mselib; the plan is to follow upstream releases and drop the fork as the work lands upstream.
+- **Servo** is one instance for the process, built at the first webview: its protocol registry and data directory are fixed then. It is the Airodonack fork of Servo's main branch (e10d0a00eb, after the 0.7.0 release), which adds Media Source Extensions over GStreamer's mselib; the plan is to follow upstream releases and drop the fork as the work lands upstream.
 
 ## Known limitations and roadmap
 
@@ -202,7 +202,7 @@ The window, monitor and dispatcher plumbing is adapted from [tauri-runtime-wry](
 | [`.cargo/`](.cargo/README.md) | Cargo configuration for this workspace (`RUSTC_BOOTSTRAP` for mozjs and Servo's script crates). |
 | `Cargo.toml` | The crate and the workspace (with the examples), its pinned Tauri and Servo dependencies, the Stylo patch block, the features. |
 | `Cargo.lock` | The exact dependency versions the checks ran with. |
-| `rust-toolchain.toml` | The Rust toolchain, 1.97.1: the one the Servo fork is built with. |
+| `rust-toolchain.toml` | The Rust toolchain, 1.99.1: the one the Servo fork is built with. |
 | `CHANGELOG.md` | What changed in each release, for someone using the crate. |
 | `LICENSE-APACHE`, `LICENSE-MIT` | The two licences, at your option. |
 | `NOTICE` | The copyright of the tauri-runtime-wry code this crate adapts. |
