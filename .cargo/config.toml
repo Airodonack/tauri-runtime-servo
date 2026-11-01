@@ -1,4 +1,4 @@
 # Same as the fork's .cargo/config.toml [env]: mozjs and script need nightly
 # features on the stable toolchain.
 [env]
-RUSTC_BOOTSTRAP = "crown,script,script_webgpu,script_bindings,style_tests,mozjs,mozjs_sys"
+RUSTC_BOOTSTRAP = "crown,script,script_webcrypto,script_webgpu,script_bindings,style_tests,mozjs,mozjs_sys"

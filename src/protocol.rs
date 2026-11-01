@@ -179,7 +179,7 @@ impl SchemeHandlers {
     /// resolves to this machine, and any local server on port 80 would be
     /// served as the app's own origin.
     pub fn intercept(&self, webview: Option<WebViewId>, load: WebResourceLoad) {
-        let (label, handler, post, uri) = match self.route(webview, &load.request().url) {
+        let (label, handler, post, uri) = match self.route(webview, load.request().url.as_url()) {
             AppRoute::NotAnAppPage => return, // dropping the load lets Servo fetch it
             AppRoute::Refused(reason) => {
                 log::warn!("app page {} refused: {reason}", load.request().url);
@@ -418,7 +418,7 @@ fn finish_app_load(id: u64, response: http::Response<Cow<'static, [u8]>>) {
         return;
     };
     let (parts, body) = response.into_parts();
-    let servo_response = WebResourceResponse::new(load.request().url.clone())
+    let servo_response = WebResourceResponse::new(load.request().url.as_url().clone())
         .status_code(parts.status)
         .status_message(reason_phrase(parts.status))
         .headers(parts.headers);
@@ -492,7 +492,7 @@ fn refusal(url: Url) -> (WebResourceResponse, Vec<u8>) {
 }
 
 fn refuse_app_load(load: WebResourceLoad) {
-    let (response, body) = refusal(load.request().url.clone());
+    let (response, body) = refusal(load.request().url.as_url().clone());
     let mut intercepted = load.intercept(response);
     intercepted.send_body_data(body);
     intercepted.finish();

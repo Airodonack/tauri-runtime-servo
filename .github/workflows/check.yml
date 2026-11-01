@@ -3,7 +3,7 @@
 #
 # The crate depends on the Servo fork by path (../../servo from the crate),
 # so the job checks the two repositories out side by side in that layout.
-# Stylo is a git dependency (the [patch.crates-io] block of Cargo.toml), which
+# Stylo is a git dependency (the [patch."https://github.com/servo/stylo"] block of Cargo.toml), which
 # cargo fetches itself: no checkout.
 name: check
 
@@ -14,7 +14,7 @@ on:
 
 env:
   SERVO_REPOSITORY: Airodonack/servo
-  SERVO_REF: vodscribe/0.7.0
+  SERVO_REF: vodscribe/main
   CARGO_TERM_COLOR: always
   CC: clang
   CXX: clang++

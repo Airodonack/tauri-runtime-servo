@@ -2,32 +2,32 @@
 resolver = "2"
 members = [".", "examples/helloworld", "examples/menubar"]
 
-# The fork's layout reads style properties (`scrollbar-width`,
-# `scrollbar-color`, `scrollbar-gutter`, `accent-color`, `text-overflow`)
-# that stock Stylo 0.22.0 leaves out of Servo's style structs: the fork's own
-# `[patch.crates-io]` swaps in the stylo fork (branch
-# vodscribe/v0.22.0 of Airodonack/stylo), but a [patch] applies only from the workspace a
-# build starts in, so this workspace, and any app that depends on this crate,
-# needs the same block. Every crate of Stylo's workspace is patched together,
-# or two copies of the shared ones get built.
-[patch.crates-io]
-selectors = { git = "https://github.com/Airodonack/stylo", rev = "b5c009c00c159d11d9c01f4c01957f4b2290b767" }
-servo_arc = { git = "https://github.com/Airodonack/stylo", rev = "b5c009c00c159d11d9c01f4c01957f4b2290b767" }
-stylo = { git = "https://github.com/Airodonack/stylo", rev = "b5c009c00c159d11d9c01f4c01957f4b2290b767" }
-stylo_atoms = { git = "https://github.com/Airodonack/stylo", rev = "b5c009c00c159d11d9c01f4c01957f4b2290b767" }
-stylo_derive = { git = "https://github.com/Airodonack/stylo", rev = "b5c009c00c159d11d9c01f4c01957f4b2290b767" }
-stylo_dom = { git = "https://github.com/Airodonack/stylo", rev = "b5c009c00c159d11d9c01f4c01957f4b2290b767" }
-stylo_malloc_size_of = { git = "https://github.com/Airodonack/stylo", rev = "b5c009c00c159d11d9c01f4c01957f4b2290b767" }
-stylo_static_prefs = { git = "https://github.com/Airodonack/stylo", rev = "b5c009c00c159d11d9c01f4c01957f4b2290b767" }
-stylo_traits = { git = "https://github.com/Airodonack/stylo", rev = "b5c009c00c159d11d9c01f4c01957f4b2290b767" }
-to_shmem = { git = "https://github.com/Airodonack/stylo", rev = "b5c009c00c159d11d9c01f4c01957f4b2290b767" }
-to_shmem_derive = { git = "https://github.com/Airodonack/stylo", rev = "b5c009c00c159d11d9c01f4c01957f4b2290b767" }
+# The fork's layout reads style properties (`scrollbar-gutter`,
+# `accent-color`) that the Stylo Servo pins leaves out of Servo's style
+# structs: the fork's own `[patch."https://github.com/servo/stylo"]` swaps in
+# the stylo fork (branch vodscribe/main of Airodonack/stylo; Servo takes Stylo
+# from git, so the patch names that source), but a [patch] applies only from
+# the workspace a build starts in, so this workspace, and any app that depends
+# on this crate, needs the same block. Every crate of Stylo's workspace is
+# patched together, or two copies of the shared ones get built.
+[patch."https://github.com/servo/stylo"]
+selectors = { git = "https://github.com/Airodonack/stylo", rev = "e3320a1f1a72f2ed8aca91769b5edfb86c46a543" }
+servo_arc = { git = "https://github.com/Airodonack/stylo", rev = "e3320a1f1a72f2ed8aca91769b5edfb86c46a543" }
+stylo = { git = "https://github.com/Airodonack/stylo", rev = "e3320a1f1a72f2ed8aca91769b5edfb86c46a543" }
+stylo_atoms = { git = "https://github.com/Airodonack/stylo", rev = "e3320a1f1a72f2ed8aca91769b5edfb86c46a543" }
+stylo_derive = { git = "https://github.com/Airodonack/stylo", rev = "e3320a1f1a72f2ed8aca91769b5edfb86c46a543" }
+stylo_dom = { git = "https://github.com/Airodonack/stylo", rev = "e3320a1f1a72f2ed8aca91769b5edfb86c46a543" }
+stylo_malloc_size_of = { git = "https://github.com/Airodonack/stylo", rev = "e3320a1f1a72f2ed8aca91769b5edfb86c46a543" }
+stylo_static_prefs = { git = "https://github.com/Airodonack/stylo", rev = "e3320a1f1a72f2ed8aca91769b5edfb86c46a543" }
+stylo_traits = { git = "https://github.com/Airodonack/stylo", rev = "e3320a1f1a72f2ed8aca91769b5edfb86c46a543" }
+to_shmem = { git = "https://github.com/Airodonack/stylo", rev = "e3320a1f1a72f2ed8aca91769b5edfb86c46a543" }
+to_shmem_derive = { git = "https://github.com/Airodonack/stylo", rev = "e3320a1f1a72f2ed8aca91769b5edfb86c46a543" }
 
 [package]
 name = "tauri-runtime-servo"
 version = "0.1.0"
 edition = "2024"
-rust-version = "1.97"
+rust-version = "1.99"
 description = "A Tauri runtime that draws the app's windows with the Servo web engine instead of wry"
 repository = "https://github.com/Airodonack/tauri-runtime-servo"
 homepage = "https://github.com/Airodonack/tauri-runtime-servo"
