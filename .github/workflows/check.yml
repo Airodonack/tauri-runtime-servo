@@ -60,7 +60,7 @@ jobs:
             libx11-dev libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev libxmu-dev libxmu6 \
             libxkbcommon0 libxkbcommon-x11-0 xorg-dev xvfb \
             libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev libgstreamer-plugins-bad1.0-dev \
-            libgstreamer-plugins-good1.0-dev libgstrtspserver-1.0-dev libges-1.0-dev \
+            libgstrtspserver-1.0-dev libges-1.0-dev \
             gstreamer1.0-plugins-base gstreamer1.0-plugins-good gstreamer1.0-plugins-bad \
             gstreamer1.0-plugins-ugly gstreamer1.0-libav gstreamer1.0-tools
 
@@ -140,7 +140,7 @@ jobs:
             libx11-dev libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev libxmu-dev libxmu6 \
             libxkbcommon0 libxkbcommon-x11-0 xorg-dev xvfb \
             libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev libgstreamer-plugins-bad1.0-dev \
-            libgstreamer-plugins-good1.0-dev libgstrtspserver-1.0-dev libges-1.0-dev \
+            libgstrtspserver-1.0-dev libges-1.0-dev \
             gstreamer1.0-plugins-base gstreamer1.0-plugins-good gstreamer1.0-plugins-bad \
             gstreamer1.0-plugins-ugly gstreamer1.0-libav gstreamer1.0-tools
 
