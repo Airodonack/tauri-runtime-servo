@@ -2,14 +2,20 @@
 //! feature, started with Servo when [`PORT_VARIABLE`] names a port.
 //!
 //! The server (the fork's `webdriver_server` crate) speaks the W3C protocol
-//! and sends what the page's engine can't do alone to the embedder as
-//! [`WebDriverCommandMsg`]s; the runtime handles those the way servoshell
-//! does (`ports/servoshell/webdriver.rs`): finding webviews, window
-//! geometry, the page's dialogs as user prompts, loads and their status,
-//! input events and screenshots. Everything else goes back to Servo with
+//! and sends the embedder, as [`WebDriverCommandMsg`]s, what only the
+//! program owning the windows can answer: which webviews exist and which is
+//! selected, window geometry, the page's dialogs as user prompts, loads and
+//! history traversals with their completion, input events and screenshots.
+//! The runtime answers those from its windows and webviews; the commands
+//! about a page's own browsing contexts and scripts go back to Servo with
 //! `execute_webdriver_command`. What a Tauri app's runtime can't do (open a
 //! window of its own) is answered with an error: the reply channel is
 //! dropped, which the server reports to the client.
+//!
+//! Some answers come later, from Servo's delegate callbacks: the server
+//! waits on a channel until a load completes, a traversal ends or an input
+//! event has been handled, and a running script must be cut short when the
+//! page opens a dialog. [`WebDriver`] keeps those channels until then.
 //!
 //! The server listens on the loopback interface only (127.0.0.1), so only
 //! programs on the same machine can reach it, but it runs any script it is
@@ -60,10 +66,17 @@ pub fn port_from_env() -> Option<u16> {
 #[derive(Default)]
 pub(crate) struct WebDriver {
     receiver: RefCell<Option<Receiver<WebDriverCommandMsg>>>,
-    load_status_senders: RefCell<HashMap<WebViewId, GenericSender<WebDriverLoadStatus>>>,
-    pending_traversals: RefCell<HashMap<TraversalId, GenericSender<WebDriverLoadStatus>>>,
-    script_interrupt: RefCell<Option<GenericSender<WebDriverJSResult>>>,
-    pending_input_events: RefCell<HashMap<InputEventId, (WebViewId, Sender<()>)>>,
+    /// Per webview, where to say that its page has loaded (or that a dialog
+    /// is blocking the load).
+    load_waits: RefCell<HashMap<WebViewId, GenericSender<WebDriverLoadStatus>>>,
+    /// Per back or forward traversal, where to say that it is done.
+    traversal_waits: RefCell<HashMap<TraversalId, GenericSender<WebDriverLoadStatus>>>,
+    /// The result channel of the script the server is running, so a dialog
+    /// can answer it; see [`WebDriver::note_script_command`].
+    running_script: RefCell<Option<GenericSender<WebDriverJSResult>>>,
+    /// Per webview, the input events the server waits on, each with where
+    /// to say it has been handled.
+    input_waits: RefCell<HashMap<WebViewId, HashMap<InputEventId, Sender<()>>>>,
     /// The webview WebDriver picked for interaction (its "current
     /// top-level browsing context").
     selected: RefCell<Option<WebViewId>>,
@@ -113,20 +126,30 @@ impl WebDriver {
 
     /// A page load finished: a navigation WebDriver waits on is done.
     pub fn load_complete(&self, webview: WebViewId) {
-        if let Some(sender) = self.load_status_senders.borrow_mut().remove(&webview) {
+        if let Some(sender) = self.load_waits.borrow_mut().remove(&webview) {
             let _ = sender.send(WebDriverLoadStatus::Complete);
         }
     }
 
+    /// A back or forward traversal finished.
     pub fn traversal_complete(&self, traversal: TraversalId) {
-        if let Some(sender) = self.pending_traversals.borrow_mut().remove(&traversal) {
+        if let Some(sender) = self.traversal_waits.borrow_mut().remove(&traversal) {
             let _ = sender.send(WebDriverLoadStatus::Complete);
         }
     }
 
-    pub fn input_event_handled(&self, event: InputEventId) {
-        if let Some((_, sender)) = self.pending_input_events.borrow_mut().remove(&event) {
+    /// A webview has handled an input event: an action the server is
+    /// performing can go on to its next step.
+    pub fn input_event_handled(&self, webview: WebViewId, event: InputEventId) {
+        let mut waits = self.input_waits.borrow_mut();
+        let Some(events) = waits.get_mut(&webview) else {
+            return;
+        };
+        if let Some(sender) = events.remove(&event) {
             let _ = sender.send(());
+        }
+        if events.is_empty() {
+            waits.remove(&webview);
         }
     }
 
@@ -137,39 +160,46 @@ impl WebDriver {
         if !self.is_active() {
             return;
         }
-        if let Some(sender) = &*self.script_interrupt.borrow() {
+        // Neither channel is dropped here: the script's goes when the next
+        // script command replaces it, and the load's still gets `Complete`
+        // if the load finishes once the dialog is answered.
+        if let Some(sender) = &*self.running_script.borrow() {
             let _ = sender.send(Ok(servo::JSValue::Null));
         }
-        if let Some(sender) = self.load_status_senders.borrow().get(&webview) {
+        if let Some(sender) = self.load_waits.borrow().get(&webview) {
             let _ = sender.send(WebDriverLoadStatus::Blocked);
         }
     }
 
-    /// Forgets what was owed to a webview that is gone.
+    /// Forgets what was owed to a webview that is gone; dropping the
+    /// channels tells the server the waits are over.
     pub fn webview_closed(&self, webview: WebViewId) {
-        self.load_status_senders.borrow_mut().remove(&webview);
-        self.pending_input_events
-            .borrow_mut()
-            .retain(|_, (id, _)| *id != webview);
+        self.load_waits.borrow_mut().remove(&webview);
+        self.input_waits.borrow_mut().remove(&webview);
     }
 
-    fn handle_script_command(&self, command: &WebDriverScriptCommand) {
-        match command {
-            // WebDriver runs one script at a time: the newest is the one a
-            // dialog interrupts.
-            WebDriverScriptCommand::ExecuteScriptWithCallback(_, sender) => {
-                *self.script_interrupt.borrow_mut() = Some(sender.clone());
-            }
-            WebDriverScriptCommand::AddLoadStatusSender(webview, sender) => {
-                self.load_status_senders
+    /// Takes what the runtime needs from a script command on its way to
+    /// Servo. Two of them register or drop a page's load wait. A script run
+    /// with a result channel is the one a dialog would interrupt; the
+    /// server runs one script at a time, so it replaces the last one, and
+    /// any other script command means the last one has ended.
+    fn note_script_command(&self, command: &WebDriverScriptCommand) {
+        use WebDriverScriptCommand as S;
+        let running = match command {
+            S::AddLoadStatusSender(webview, sender) => {
+                self.load_waits
                     .borrow_mut()
                     .insert(*webview, sender.clone());
+                return;
             }
-            WebDriverScriptCommand::RemoveLoadStatusSender(webview) => {
-                self.load_status_senders.borrow_mut().remove(webview);
+            S::RemoveLoadStatusSender(webview) => {
+                self.load_waits.borrow_mut().remove(webview);
+                return;
             }
-            _ => *self.script_interrupt.borrow_mut() = None,
-        }
+            S::ExecuteScriptWithCallback(_, result) => Some(result.clone()),
+            _ => None,
+        };
+        *self.running_script.borrow_mut() = running;
     }
 }
 
@@ -262,32 +292,8 @@ impl<T: UserEvent> Context<T> {
             }
             M::SetWindowRect(id, requested, sender) => {
                 if let Some(found) = self.find_webview(id) {
-                    let window = &found.window;
-                    let scale = window.scale_factor() as f32;
-                    let scale =
-                        euclid::Scale::<f32, DeviceIndependentPixel, servo::DevicePixel>::new(
-                            scale,
-                        );
-                    let requested = (requested.to_f32() * scale).round().to_i32();
-                    // WebDriver's size is the outer one; tao sets the inner.
-                    let outer = window.outer_size();
-                    let inner = window.inner_size();
-                    let frame_width = outer.width.saturating_sub(inner.width);
-                    let frame_height = outer.height.saturating_sub(inner.height);
-                    let size = requested.size();
-                    window.set_inner_size(PhysicalSize::new(
-                        (size.width.max(1) as u32)
-                            .saturating_sub(frame_width)
-                            .max(1),
-                        (size.height.max(1) as u32)
-                            .saturating_sub(frame_height)
-                            .max(1),
-                    ));
-                    window.set_outer_position(PhysicalPosition::new(
-                        requested.min.x,
-                        requested.min.y,
-                    ));
-                    let _ = sender.send(window_rect(window));
+                    set_window_rect(&found.window, requested);
+                    let _ = sender.send(window_rect(&found.window));
                 }
             }
             M::MaximizeWebView(id, sender) => {
@@ -364,7 +370,7 @@ impl<T: UserEvent> Context<T> {
                             .is_ok()
                     {}
                     webdriver
-                        .load_status_senders
+                        .load_waits
                         .borrow_mut()
                         .insert(id, load_status_sender);
                     found.webview.webview.load(url);
@@ -373,7 +379,7 @@ impl<T: UserEvent> Context<T> {
             M::Refresh(id, load_status_sender) => {
                 if let Some(found) = self.find_webview(id) {
                     webdriver
-                        .load_status_senders
+                        .load_waits
                         .borrow_mut()
                         .insert(id, load_status_sender);
                     found.webview.webview.reload();
@@ -383,7 +389,7 @@ impl<T: UserEvent> Context<T> {
                 if let Some(found) = self.find_webview(id) {
                     let traversal = found.webview.webview.go_back(1);
                     webdriver
-                        .pending_traversals
+                        .traversal_waits
                         .borrow_mut()
                         .insert(traversal, load_status_sender);
                 }
@@ -392,7 +398,7 @@ impl<T: UserEvent> Context<T> {
                 if let Some(found) = self.find_webview(id) {
                     let traversal = found.webview.webview.go_forward(1);
                     webdriver
-                        .pending_traversals
+                        .traversal_waits
                         .borrow_mut()
                         .insert(traversal, load_status_sender);
                 }
@@ -400,11 +406,14 @@ impl<T: UserEvent> Context<T> {
             M::InputEvent(id, event, sender) => match self.find_webview(id) {
                 Some(found) => {
                     let event_id = found.webview.webview.notify_input_event(event);
+                    // Only some actions wait for the page to handle the event.
                     if let Some(sender) = sender {
                         webdriver
-                            .pending_input_events
+                            .input_waits
                             .borrow_mut()
-                            .insert(event_id, (id, sender));
+                            .entry(id)
+                            .or_default()
+                            .insert(event_id, sender);
                     }
                 }
                 None => log::warn!("WebDriver input event for a webview that is gone"),
@@ -441,7 +450,7 @@ impl<T: UserEvent> Context<T> {
                 }
             }
             M::ScriptCommand(_, ref command) => {
-                webdriver.handle_script_command(command);
+                webdriver.note_script_command(command);
                 self.forward_to_servo(message);
             }
             message @ (M::FocusBrowsingContext(..) | M::IsBrowsingContextOpen(..)) => {
@@ -457,6 +466,32 @@ impl<T: UserEvent> Context<T> {
             None => log::warn!("a WebDriver command before Servo was built"),
         }
     }
+}
+
+/// Moves and resizes the window to WebDriver's requested rectangle (CSS
+/// pixels, the outer frame included), as near as tao allows.
+fn set_window_rect(window: &Window, requested: servo::DeviceIndependentIntRect) {
+    // tao works in physical pixels: scale each edge and round it, so the
+    // width is the distance between two rounded edges.
+    let scale = window.scale_factor() as f32;
+    let physical = |css: i32| (css as f32 * scale).round() as i32;
+    let (left, top) = (physical(requested.min.x), physical(requested.min.y));
+    let width = physical(requested.max.x) - left;
+    let height = physical(requested.max.y) - top;
+    // WebDriver's size is the outer one; tao sets the inner, so the frame
+    // (title bar and borders) comes off. A window keeps at least a pixel.
+    let outer = window.outer_size();
+    let inner = window.inner_size();
+    let inner_size = |requested: i32, outer: u32, inner: u32| {
+        (requested.max(1) as u32)
+            .saturating_sub(outer.saturating_sub(inner))
+            .max(1)
+    };
+    window.set_inner_size(PhysicalSize::new(
+        inner_size(width, outer.width, inner.width),
+        inner_size(height, outer.height, inner.height),
+    ));
+    window.set_outer_position(PhysicalPosition::new(left, top));
 }
 
 /// The window's outer rectangle in device-independent pixels, as WebDriver's

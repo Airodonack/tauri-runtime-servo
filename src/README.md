@@ -30,7 +30,7 @@ Each file's unit tests sit at its end, in a `tests` module. They cover the pure 
 | `webview.rs` | Webviews: a Servo `WebView` on an X11 child window, its delegate (loads, navigation, dialogs, console), initialization scripts, `eval` results as JSON, the webview messages and `WebviewDispatch`. |
 | `protocol.rs` | Tauri's URI schemes (`ipc`, `tauri`, `asset`, the plugins') as Servo protocol handlers, and the app's pages served as `http://tauri.localhost` through request interception; an app page it cannot route, or one Servo loads for no webview (the runtime's Servo delegate), gets an error response instead of a network fetch. |
 | `x11.rs` | The webview's native surface: an X11 child window that takes no input, with the visual Servo's EGL config needs; and the page area of the window's GTK box (below a menu bar) that the window's page is placed on. |
-| `input.rs` | tao's pointer, wheel and key events converted to Servo input events (after servoshell). |
+| `input.rs` | tao's pointer, wheel and key events converted to Servo input events, with the wheel clicks tao drops caught from GTK. |
 | `dialog.rs` | The page's `alert()`, `confirm()` and `prompt()` as GTK message dialogs, which WebDriver can also answer. |
 | `monitor.rs` | tao's monitors as Tauri's `Monitor`, work areas and centring (adapted from tauri-runtime-wry). |
 | `webdriver.rs` | Servo's WebDriver server for end-to-end tests (the `webdriver` feature): starting it on 127.0.0.1 and answering the commands it sends the embedder. |

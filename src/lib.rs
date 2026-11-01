@@ -14,8 +14,7 @@
 //! The dispatcher and window plumbing (the `Message` enum, the main-thread
 //! context, the window builder and the window getters and setters) is adapted
 //! from tauri-runtime-wry 2.12.1, Copyright 2019-2024 Tauri Programme within
-//! The Commons Conservancy, Apache-2.0 OR MIT. The input conversion follows
-//! servoshell's (MPL-2.0).
+//! The Commons Conservancy, Apache-2.0 OR MIT.
 //!
 //! Tauri's IPC works as on wry: the custom URI schemes (`ipc`, `tauri`,
 //! `asset`, the plugins') are Servo protocol handlers forwarding to Tauri's
@@ -26,8 +25,8 @@
 //! WebDriver server when `TAURI_RUNTIME_SERVO_WEBDRIVER_PORT` names a port
 //! ([`WEBDRIVER_PORT_VARIABLE`]): a test client talks W3C WebDriver to the
 //! app on that port directly (no tauri-driver). The page's dialogs are its
-//! user prompts. The server listens on every interface and runs any script
-//! it is sent, so the feature is for test builds only.
+//! user prompts. The server listens on the loopback interface only, but it
+//! runs any script it is sent, so the feature is for test builds only.
 //!
 //! Status: Linux on X11 only; the webview operations Servo cannot do yet
 //! return [`tauri_runtime::Error`]s.

@@ -35,8 +35,7 @@ readme = "README.md"
 keywords = ["tauri", "servo", "runtime", "webview", "gui"]
 categories = ["gui", "web-programming"]
 # The window, monitor and dispatcher plumbing is adapted from tauri-runtime-wry
-# (Apache-2.0 OR MIT, see NOTICE); the input conversion follows servoshell
-# (MPL-2.0).
+# (Apache-2.0 OR MIT, see NOTICE).
 license = "Apache-2.0 OR MIT"
 # Not on crates.io yet: libservo and the Stylo branch are path dependencies.
 publish = false
@@ -62,7 +61,7 @@ euclid = "0.22"
 http = "1"
 url = "2"
 log = "0.4"
-# The fork's libservo with servoshell's web features and the GStreamer media stack.
+# The fork's libservo with its default web features, gamepads and the GStreamer media stack.
 servo = { path = "../../servo/components/servo", default-features = false, features = [
     "bundled",
     "clipboard",
