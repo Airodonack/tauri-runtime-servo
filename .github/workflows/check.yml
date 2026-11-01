@@ -21,7 +21,7 @@ env:
 
 jobs:
   check:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 180
     defaults:
       run:
@@ -119,7 +119,7 @@ jobs:
   # the tree it was built in, as an app's would.
   smoke:
     needs: check
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 20
     steps:
       - name: Check out the runtime
