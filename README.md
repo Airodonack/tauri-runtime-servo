@@ -82,7 +82,7 @@ Missing without an error or a warning:
 | Tauri | 2.12 (`tauri` 2.12.3, `tauri-runtime` =2.12.1, `tauri-utils` =2.10.2) | the runtime traits are not semver-stable, so the pins are exact |
 | libservo | the [Airodonack/servo](https://github.com/Airodonack/servo) fork, branch `vodscribe/main` (Servo 0.7.0 + Media Source Extensions) | a path dependency for now, see [Using it](#using-it-in-a-tauri-app) |
 | Stylo | 0.22.0 plus the fork's style properties (branch `vodscribe/v0.22.0` of [Airodonack/stylo](https://github.com/Airodonack/stylo), a git dependency) | patched in by every consumer, see below |
-| GStreamer | 1.24 or newer to build (`gstreamer-mse-1.0` is in gst-plugins-bad since 1.24); 1.28 recommended to run | media; the X11, EGL and GTK development packages are listed in [.github/workflows/check.yml](.github/workflows/check.yml) |
+| GStreamer | 1.26 or newer to build (the Rust bindings for `gstreamer-mse-1.0` ask pkg-config for 1.26, though mselib itself is in gst-plugins-bad since 1.24); 1.28 recommended to run. Ubuntu 24.04 ships 1.24 and cannot build it; 26.04 ships 1.28 | media; the X11, EGL and GTK development packages are listed in [.github/workflows/check.yml](.github/workflows/check.yml) |
 | WebKitGTK 4.1 development files | build time only | `tauri` and `tauri-runtime` depend on `webkit2gtk` on Linux whatever the runtime; nothing of it is linked into the binary |
 
 ## Quick start
