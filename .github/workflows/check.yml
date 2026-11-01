@@ -64,6 +64,19 @@ jobs:
             gstreamer1.0-plugins-base gstreamer1.0-plugins-good gstreamer1.0-plugins-bad \
             gstreamer1.0-plugins-ugly gstreamer1.0-libav gstreamer1.0-tools
 
+      # One LLVM for the C++ parts of Servo and for bindgen. The image's own
+      # clang comes in three versions, and bindgen's libclang must match the
+      # headers it parses: with the 26.04 image mozangle's bindings failed on
+      # clang 21's intrinsics headers ("use of undeclared identifier
+      # '__builtin_ia32_sqrtss'"). Servo's own CI pins the same release.
+      - name: Install LLVM and Clang
+        uses: KyleMayes/install-llvm-action@v2
+        with:
+          version: "20.1"
+          directory: ${{ runner.temp }}/llvm
+      - name: Point bindgen at that LLVM
+        run: echo "LIBCLANG_PATH=${LLVM_PATH}/lib" >> "$GITHUB_ENV"
+
       # rust-toolchain.toml names the toolchain; rustup installs it on first use.
       - name: Show the toolchain
         run: rustup show active-toolchain && cargo --version
