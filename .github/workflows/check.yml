@@ -83,19 +83,15 @@ jobs:
       - name: Lints
         run: cargo clippy --release --workspace --all-targets --all-features -- -D warnings
 
-      # rustdoc compiles with debug assertions on whatever the profile, so in
-      # the release profile it sees the devtools methods while tauri-runtime
-      # (compiled without debug assertions) has none, and fails. With the
-      # `devtools` feature both have them.
       - name: Documentation
         env:
           RUSTDOCFLAGS: -D warnings
-        run: cargo doc --release --no-deps -p tauri-runtime-servo --features devtools
+        run: cargo doc --release --no-deps -p tauri-runtime-servo
 
       # The ignored tests need an X display (one GTK start per process);
       # Xvfb gives them one.
       - name: Tests
-        run: xvfb-run -a cargo test --release -p tauri-runtime-servo --features devtools -- --include-ignored
+        run: xvfb-run -a cargo test --release -p tauri-runtime-servo -- --include-ignored
 
       # Copied at once: the next two builds write the same path.
       - name: The example

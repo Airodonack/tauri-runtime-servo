@@ -45,7 +45,15 @@ publish = false
 # The runtime trait is "not stable": bumped together and deliberately, at
 # the minor version tauri-runtime-wry 2.12 pins (`~`), so a consumer still
 # takes Tauri's patch releases.
-tauri-runtime = "~2.12.1"
+# tauri-runtime's devtools methods exist on the trait only with its `devtools`
+# feature (or debug assertions in tauri-runtime's own build). This crate
+# always turns the feature on and implements them in every profile, so the
+# trait and the impl agree whatever profile or tool builds the two crates
+# (rustdoc builds this crate with debug assertions against a release
+# tauri-runtime without them). An app that also has tauri-runtime-wry in its
+# graph without wry's `devtools` feature will fail to build: the two runtimes
+# are not meant to share a binary.
+tauri-runtime = { version = "~2.12.1", features = ["devtools"] }
 tauri-utils = "~2.10.2"
 tao = { version = "~0.37.1", default-features = false, features = ["rwh_06", "x11", "dbus"] }
 raw-window-handle = "0.6"
@@ -91,9 +99,6 @@ x11-dl = "2.21"
 khronos-egl = { version = "6", features = ["dynamic"] }
 
 [features]
-# Mirrors tauri-runtime's: the devtools methods exist on the trait in debug
-# builds and with this feature.
-devtools = ["tauri-runtime/devtools"]
 # Servo's WebDriver server, started when TAURI_RUNTIME_SERVO_WEBDRIVER_PORT
 # names a port. Test builds only: it listens on 127.0.0.1, where any local
 # program can reach it, and runs any script it is sent.

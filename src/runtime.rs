@@ -1063,7 +1063,6 @@ mod tests {
         assert!(is_unsupported(webview.delete_cookie(Cookie::new("a", "b"))));
         assert!(is_unsupported(webview.clear_all_browsing_data()));
         assert!(is_unsupported(webview.set_background_color(None)));
-        #[cfg(any(debug_assertions, feature = "devtools"))]
         assert!(matches!(webview.is_devtools_open(), Ok(false)));
 
         // A getter on a webview or window that is gone fails; it never hangs.

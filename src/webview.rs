@@ -727,7 +727,6 @@ impl<T: UserEvent> WebviewDispatch<T> for ServoWebviewDispatcher<T> {
         self.send(WebviewMessage::WithWebview(Box::new(f)))
     }
 
-    #[cfg(any(debug_assertions, feature = "devtools"))]
     fn open_devtools(&self) {
         // Servo has no inspector window; its devtools server (the
         // `devtools_server_enabled` preference) serves Firefox's remote
@@ -737,10 +736,8 @@ impl<T: UserEvent> WebviewDispatch<T> for ServoWebviewDispatcher<T> {
         );
     }
 
-    #[cfg(any(debug_assertions, feature = "devtools"))]
     fn close_devtools(&self) {}
 
-    #[cfg(any(debug_assertions, feature = "devtools"))]
     fn is_devtools_open(&self) -> Result<bool> {
         Ok(false)
     }
