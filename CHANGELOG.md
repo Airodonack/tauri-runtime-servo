@@ -6,26 +6,24 @@ under the closing "Fixes" bullet.
 
 ## Unreleased
 
-- First release: a Tauri 2.12 runtime that draws the app's windows with
-  Servo on Linux (X11), with tao windows.
-- Tauri's IPC works as on wry: commands, events, plugins and their
-  permissions, the app's own `tauri://localhost` pages, initialization
-  scripts and `eval` with its result.
-- The page's `alert()`, `confirm()` and `prompt()` open as dialogs over the
-  window.
-- A window's menu bar from Tauri's menu API sits above the page, as on
-  wry, and the page moves up and down with it when the bar is hidden or
-  shown.
-- The page's storage and cookies are kept in the app's local data folder.
-- End-to-end tests can drive an app over WebDriver in builds with the
-  `webdriver` feature; the WebDriver server answers on this machine only
-  (127.0.0.1), not from the network.
-- A page's IPC requests are answered with its own webview's permissions,
-  and refused when the webview they came from is unknown and several could
-  take them.
-- An app page the runtime can't hand to the app gets an error page; it is
-  never fetched from the network instead.
-- The page's console appears in the log at debug level only.
-- A `preventOverflow` margin larger than the screen no longer crashes
-  debug builds; the window is shrunk to the room left, which is none.
-- Works with NVIDIA's drivers as with Mesa's.
+- Servo draws the app's windows. First release: Tauri 2.12 on Linux (X11),
+  with tao windows.
+- Tauri IPC works as on wry. Commands, events, plugins and their
+  permissions, the app's `tauri://localhost` pages, initialization scripts
+  and `eval` with its result.
+- Page dialogs open over the window. `alert()`, `confirm()` and `prompt()`.
+- Menu bars sit above the page. The page moves with the bar when it is
+  shown or hidden, as on wry.
+- Storage and cookies persist per app. They live in its local data folder.
+- WebDriver drives apps in test builds. Needs the `webdriver` feature; the
+  server answers on 127.0.0.1 only.
+- IPC uses each webview's own permissions. A request from an unknown
+  webview is refused when several could take it.
+- Unhandled app pages show an error. They are never fetched from the
+  network.
+- Console output lands in debug logs.
+- Fixes:
+  - Oversized margins no longer crash. A `preventOverflow` margin wider
+    than the screen shrinks the window to the room left; debug builds
+    used to panic.
+  - Works with NVIDIA drivers.
