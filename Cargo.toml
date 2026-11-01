@@ -42,10 +42,12 @@ license = "Apache-2.0 OR MIT"
 publish = false
 
 [dependencies]
-# The runtime trait is "not stable": exact pins, bumped together and deliberately.
-tauri-runtime = "=2.12.1"
-tauri-utils = "=2.10.2"
-tao = { version = "=0.37.1", default-features = false, features = ["rwh_06", "x11", "dbus"] }
+# The runtime trait is "not stable": bumped together and deliberately, at
+# the minor version tauri-runtime-wry 2.12 pins (`~`), so a consumer still
+# takes Tauri's patch releases.
+tauri-runtime = "~2.12.1"
+tauri-utils = "~2.10.2"
+tao = { version = "~0.37.1", default-features = false, features = ["rwh_06", "x11", "dbus"] }
 raw-window-handle = "0.6"
 dpi = "0.1"
 euclid = "0.22"
