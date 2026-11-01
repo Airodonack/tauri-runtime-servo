@@ -189,7 +189,7 @@ Open an issue on [Airodonack/tauri-runtime-servo](https://github.com/Airodonack/
 
 Licensed under either of [Apache License 2.0](LICENSE-APACHE) or [MIT](LICENSE-MIT), at your option. Copyright Airodonack.
 
-The window, monitor and dispatcher plumbing is adapted from [tauri-runtime-wry](https://github.com/tauri-apps/tauri/tree/dev/crates/tauri-runtime-wry) 2.12.1, Copyright 2019-2024 Tauri Programme within The Commons Conservancy, Apache-2.0 OR MIT; see [NOTICE](NOTICE). The input conversion and the WebDriver command handling follow servoshell's (MPL-2.0). Thanks to the Tauri and Servo projects, whose work this only connects.
+The window, monitor and dispatcher plumbing is adapted from [tauri-runtime-wry](https://github.com/tauri-apps/tauri/tree/dev/crates/tauri-runtime-wry) 2.12.1, Copyright 2019-2024 Tauri Programme within The Commons Conservancy, Apache-2.0 OR MIT; see [NOTICE](NOTICE). The input conversion and the WebDriver command handling are this crate's own, written against libservo's public API; servoshell, Servo's own browser shell, was the reference for what an embedder has to handle (which events and commands, and how a page should behave under them, such as how far a wheel click scrolls). Thanks to the Tauri and Servo projects, whose work this only connects.
 
 ## What is in this directory
 

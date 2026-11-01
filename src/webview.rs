@@ -268,11 +268,11 @@ impl WebViewDelegate for Delegate {
 
     fn notify_input_event_handled(
         &self,
-        _webview: WebView,
+        webview: WebView,
         event: servo::InputEventId,
         _result: servo::InputEventResult,
     ) {
-        self.webdriver.input_event_handled(event);
+        self.webdriver.input_event_handled(webview.id(), event);
     }
 
     fn show_embedder_control(&self, webview: WebView, control: EmbedderControl) {

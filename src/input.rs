@@ -1,9 +1,16 @@
-//! tao window events to Servo input events (after servoshell's
-//! `headed_window.rs` and `keyutils.rs`, ported from winit to tao).
+//! tao window events to Servo input events.
 //!
 //! The webview's child window takes no input, so every pointer, wheel and
 //! key event arrives on the GTK toplevel and comes here through tao; the
-//! runtime is the webview's whole input stack.
+//! runtime is the webview's whole input stack. [`InputState`] remembers the
+//! pointer and the held modifiers per window, [`forward`] turns one tao event
+//! into the Servo event for one webview (pointer events only when the pointer
+//! is over that webview, a "mouse left" when it moves off), and
+//! [`connect_discrete_scroll`] covers the wheel clicks tao 0.37 loses.
+//!
+//! Keys go by name: tao's logical keys and key codes use the UI Events
+//! names Servo's `Key` and `Code` parse, so only the few that differ are
+//! spelled out.
 
 use std::cell::Cell;
 use std::str::FromStr;
@@ -19,9 +26,15 @@ use servo::{
 use tao::event::{ElementState, MouseButton, MouseScrollDelta, WindowEvent};
 use tao::keyboard::{Key as TaoKey, KeyCode, KeyLocation, ModifiersState};
 
-/// Pixels per wheel "line", servoshell's value.
-const LINE_HEIGHT: f32 = 76.0;
-const LINE_WIDTH: f32 = 76.0;
+/// How far one wheel line scrolls, in pixels, across or down: GTK counts a
+/// plain wheel click as one line (and tao passes lines on), but Servo's
+/// wheel events carry pixels, so the runtime picks the size of a line. It
+/// is a choice, not a measurement: about four lines of 16 px text at the
+/// usual 1.2 line height, so a click moves the page by a few lines of
+/// reading. It is the step Servo's own browser shell scrolls, so a page
+/// scrolls the same in a Tauri app as there. One size serves both
+/// directions.
+const WHEEL_LINE_PIXELS: f32 = 76.0;
 
 /// What the conversion remembers between events, per window.
 #[derive(Debug, Default)]
@@ -141,13 +154,16 @@ fn inside(point: DevicePoint, size: (u32, u32)) -> bool {
     point.x >= 0.0 && point.y >= 0.0 && point.x < size.0 as f32 && point.y < size.1 as f32
 }
 
-/// A tao wheel delta in pixels; lines count as servoshell's line size.
+/// A tao wheel delta in pixels, across and down: a smooth scroll (touchpad)
+/// already is, a line delta is [`WHEEL_LINE_PIXELS`] per line. `None` for a
+/// kind of delta tao may add later.
 fn wheel_delta(delta: &MouseScrollDelta) -> Option<(f64, f64)> {
-    match delta {
-        MouseScrollDelta::LineDelta(x, y) => {
-            Some(((x * LINE_WIDTH) as f64, (y * LINE_HEIGHT) as f64))
+    let lines_to_pixels = |lines: f32| f64::from(lines * WHEEL_LINE_PIXELS);
+    match *delta {
+        MouseScrollDelta::PixelDelta(pixels) => Some((pixels.x, pixels.y)),
+        MouseScrollDelta::LineDelta(across, down) => {
+            Some((lines_to_pixels(across), lines_to_pixels(down)))
         }
-        MouseScrollDelta::PixelDelta(position) => Some((position.x, position.y)),
         _ => None,
     }
 }
@@ -162,7 +178,8 @@ fn discrete_scroll_delta(direction: ScrollDirection) -> Option<(f64, f64)> {
         ScrollDirection::Right => (-1.0, 0.0),
         _ => return None,
     };
-    Some((x * LINE_WIDTH as f64, y * LINE_HEIGHT as f64))
+    let line = f64::from(WHEEL_LINE_PIXELS);
+    Some((x * line, y * line))
 }
 
 /// A GDK event position (logical pixels of the GTK window) relative to the
@@ -213,6 +230,8 @@ pub fn connect_discrete_scroll(
     });
 }
 
+/// tao's button as the DOM's: left, right and middle are its primary,
+/// secondary and auxiliary buttons.
 fn mouse_button(button: MouseButton) -> ServoMouseButton {
     match button {
         MouseButton::Left => ServoMouseButton::Primary,
@@ -258,6 +277,8 @@ fn key(key: &TaoKey<'_>) -> Key {
         TaoKey::Character(text) => Key::Character(text.to_string()),
         TaoKey::Space => Key::Character(" ".into()),
         TaoKey::Super => Key::Named(NamedKey::Meta),
+        // A key tao could not name, and a dead key (the accent typed before
+        // the letter it goes on), reach the page as "Unidentified".
         TaoKey::Unidentified(_) | TaoKey::Dead(_) => Key::Named(NamedKey::Unidentified),
         named => {
             Key::Named(NamedKey::from_str(&format!("{named:?}")).unwrap_or(NamedKey::Unidentified))
@@ -284,13 +305,23 @@ fn location(location: KeyLocation) -> Location {
     }
 }
 
-fn keyboard_modifiers(modifiers: ModifiersState) -> Modifiers {
-    let mut result = Modifiers::empty();
-    result.set(Modifiers::CONTROL, modifiers.control_key());
-    result.set(Modifiers::SHIFT, modifiers.shift_key());
-    result.set(Modifiers::ALT, modifiers.alt_key());
-    result.set(Modifiers::META, modifiers.super_key());
-    result
+/// Each tao modifier and the Servo one it stands for; tao's Super key
+/// (the "Windows" key) is the UI Events `Meta`.
+const MODIFIER_PAIRS: [(ModifiersState, Modifiers); 4] = [
+    (ModifiersState::SHIFT, Modifiers::SHIFT),
+    (ModifiersState::CONTROL, Modifiers::CONTROL),
+    (ModifiersState::ALT, Modifiers::ALT),
+    (ModifiersState::SUPER, Modifiers::META),
+];
+
+/// The modifiers held, as Servo's flags. tao knows only these four; Servo's
+/// others (Caps Lock, Num Lock and the like) are never set, since tao does
+/// not report them.
+fn keyboard_modifiers(held: ModifiersState) -> Modifiers {
+    MODIFIER_PAIRS
+        .iter()
+        .filter(|(tao, _)| held.contains(*tao))
+        .fold(Modifiers::empty(), |servo, (_, flag)| servo | *flag)
 }
 
 #[cfg(test)]
