@@ -58,7 +58,7 @@ Works:
 Does not work yet (each returns a `tauri_runtime::Error` or logs a warning):
 
 - Wayland, macOS and Windows (the crate refuses to build off Linux);
-- devtools (Servo has no built-in inspector), printing, moving a webview to another window;
+- devtools (Servo has no built-in inspector; the methods exist in every build, because this crate turns on `tauri-runtime`'s `devtools` feature so the trait and its implementation never disagree between profiles), printing, moving a webview to another window;
 - the cookie API (`cookies`, `set_cookie`, `delete_cookie`), clearing browsing data, a webview's background colour;
 - `<select>` pickers, colour and file pickers, input methods and context menus (Servo asks for them; nothing is drawn, so the default answer is taken);
 - `window.open`, permission prompts (denied), HTTP authentication (cancelled), the page moving or resizing its window;
@@ -154,7 +154,6 @@ fn main() {
 
 | Feature | Default | What it does, and why |
 |---|---|---|
-| `devtools` | off | Mirrors `tauri-runtime`'s: the devtools methods exist on the trait in debug builds and with it. They do nothing yet (Servo has no inspector window). |
 | `webdriver` | off | Builds in Servo's WebDriver server so end-to-end tests drive the app over W3C WebDriver, with no tauri-driver. **Test builds only**: the server listens on the loopback interface only (`127.0.0.1`), so no other machine can reach it, but any program on this one can, and it runs any script it is sent in the app's pages, which can call the app's commands. Never ship it. |
 
 ### Environment variables
@@ -184,7 +183,7 @@ Next, roughly in order: the embedder controls (`<select>`, file and colour picke
 
 ## Reporting problems and contributing
 
-Open an issue on [Airodonack/tauri-runtime-servo](https://github.com/Airodonack/tauri-runtime-servo/issues) with the Tauri version, the log with `RUST_LOG=warn,tauri_runtime_servo=debug`, and the smallest page or app that shows it. Bugs in Servo itself belong with [Servo](https://github.com/servo/servo) when they reproduce in servoshell; mention them here too if they block an app. Pull requests are welcome: run the checks in [.github/workflows/check.yml](.github/workflows/check.yml) first (`cargo fmt -p tauri-runtime-servo -p helloworld -p menubar -- --check`, `cargo clippy --release --workspace --all-targets --all-features -- -D warnings`, `xvfb-run -a cargo test --release -p tauri-runtime-servo --features devtools -- --include-ignored`, and after `cargo build --release -p helloworld`, `examples/helloworld/smoke-test.sh target/release/helloworld`). Never `cargo fmt --all` here: it would reformat the Servo checkout the path dependencies point at.
+Open an issue on [Airodonack/tauri-runtime-servo](https://github.com/Airodonack/tauri-runtime-servo/issues) with the Tauri version, the log with `RUST_LOG=warn,tauri_runtime_servo=debug`, and the smallest page or app that shows it. Bugs in Servo itself belong with [Servo](https://github.com/servo/servo) when they reproduce in servoshell; mention them here too if they block an app. Pull requests are welcome: run the checks in [.github/workflows/check.yml](.github/workflows/check.yml) first (`cargo fmt -p tauri-runtime-servo -p helloworld -p menubar -- --check`, `cargo clippy --release --workspace --all-targets --all-features -- -D warnings`, `xvfb-run -a cargo test --release -p tauri-runtime-servo -- --include-ignored`, and after `cargo build --release -p helloworld`, `examples/helloworld/smoke-test.sh target/release/helloworld`). Never `cargo fmt --all` here: it would reformat the Servo checkout the path dependencies point at.
 
 ## Licence and acknowledgements
 
