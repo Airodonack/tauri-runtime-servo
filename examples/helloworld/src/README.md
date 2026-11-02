@@ -1,7 +1,7 @@
-# helloworld/src: the app's Rust side
+# helloworld/src
 
-The whole app is one file. It starts logging, serves the page on the loopback `devUrl` in development mode, registers the commands the page calls and the clipboard plugin, makes the window from `tauri.conf.json`, emits a `tick` event every second, and on the page's `page_ready` command evaluates scripts in it and prints their JSON results. The [helloworld README](../README.md) says how to run it and what each `RESULT` line checks.
+One file. It serves the page in dev mode, registers the commands and the clipboard plugin, makes the window, emits a `tick` event every second, and runs `eval` checks when the page reports ready.
 
 | File | What it holds |
 |---|---|
-| `main.rs` | The app: the page server, the commands (`greet`, `add_later`, `fail`, `reverse_bytes`, `page_ready`), the builder on `ServoRuntime`, and `HELLOWORLD_CLOSE_AFTER` for headless runs. |
+| `main.rs` | The page server, the commands (`greet`, `add_later`, `fail`, `reverse_bytes`, `page_ready`), the builder on `ServoRuntime`, `HELLOWORLD_CLOSE_AFTER`. |

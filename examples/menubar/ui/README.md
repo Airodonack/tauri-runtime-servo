@@ -1,7 +1,7 @@
-# menubar/ui: the page
+# menubar/ui
 
-The page the app shows, plain HTML and JavaScript with no build step. It draws a red band along its top edge (hidden if the page sits under the menu bar) and prints a `RESULT` line with its size at load and on every resize, and with the place of every click it receives. Tauri embeds this folder and serves it from `tauri://localhost`.
+The page, plain HTML and JavaScript. It draws a red band along its top edge and prints a `RESULT` line with its size on load and resize, and with the position of every click.
 
 | File | What it holds |
 |---|---|
-| `index.html` | The page, its styles and its checks. |
+| `index.html` | The page and its checks. |

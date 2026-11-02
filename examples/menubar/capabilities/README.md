@@ -1,7 +1,7 @@
-# menubar/capabilities: what the page may call
+# menubar/capabilities
 
-Tauri 2 grants a window's pages access to commands and plugins through capability files; `tauri-build` reads every file here. The page calls nothing, so Tauri's core defaults are all it gets.
+Tauri 2 capability files: what the window's pages may call.
 
 | File | What it holds |
 |---|---|
-| `default.json` | The `main` window's permissions: Tauri's core defaults. |
+| `default.json` | The `main` window: Tauri's core defaults. |
