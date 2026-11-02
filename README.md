@@ -1,93 +1,57 @@
 # tauri-runtime-servo
 
-**A drop-in Tauri runtime that draws your app's windows with the Servo web engine instead of the system webview.**
+**A Tauri runtime that draws your app's windows with the Servo web engine instead of the system webview.**
 
-A Tauri app normally shows its pages through [wry](https://github.com/tauri-apps/wry), which on Linux means WebKitGTK. This crate implements the same `tauri-runtime` traits wry's runtime does, but each webview is a [Servo](https://servo.org) `WebView` painting into the window. The app's Rust code, its commands, events, plugins and permissions stay as they are; only the engine under the page changes.
+Tauri normally shows pages through [wry](https://github.com/tauri-apps/wry), which on Linux means WebKitGTK. This crate implements the same `tauri-runtime` traits with a [Servo](https://servo.org) `WebView` in each window. Your commands, events, plugins and permissions stay as they are.
 
-## Why it exists, and who it is for
+It was written for [VODscribe](https://github.com/Airodonack/VODscribe), a desktop app that plays video sites' players with Media Source Extensions on the same engine on every Linux system.
 
-It was written for [VODscribe](https://github.com/Airodonack/VODscribe), a desktop app whose pages must play video sites' players unmodified, with Media Source Extensions, on a media stack the app controls (Servo's GStreamer backend), the same on every Linux system rather than whichever WebKitGTK the distribution ships. That makes it useful to:
-
-- Tauri app authors on Linux who want one engine, built into the binary, instead of the system's;
-- people who embed Servo and want Tauri's window, IPC and plugin machinery around it;
-- anyone curious how far Servo gets as a real application's webview.
-
-It is not (yet) a general replacement for wry: see [Status](#status).
-
-## The picture
-
-![The helloworld example running on Servo under Xvfb](docs/helloworld.png)
+![The helloworld example running on Servo](docs/helloworld.png)
 
 ```mermaid
 flowchart TB
     subgraph app["Your Tauri app"]
         cmds["commands, events, plugins, capabilities"]
     end
-    subgraph trs["tauri-runtime-servo (this crate)"]
-        rt["ServoRuntime: tao event loop, windows,<br/>dispatchers (runtime.rs, window.rs)"]
-        wv["webviews: Servo WebView on an X11 child window,<br/>input forwarding, dialogs (webview.rs, x11.rs, input.rs)"]
-        proto["Tauri's URI schemes as Servo protocol handlers<br/>(ipc://, tauri://, asset://, plugins') (protocol.rs)"]
+    subgraph trs["tauri-runtime-servo"]
+        rt["ServoRuntime: tao event loop, windows, dispatchers"]
+        wv["webviews: Servo WebView on an X11 child window, input, dialogs"]
+        proto["Tauri's URI schemes as Servo protocol handlers"]
     end
-    subgraph servo["libservo (Servo fork, main + MSE)"]
-        engine["script, layout, WebRender painting,<br/>net, GStreamer media"]
+    subgraph servo["libservo (Servo fork with MSE)"]
+        engine["script, layout, WebRender, net, GStreamer media"]
     end
-    app -- "tauri-runtime 2.12.1 traits" --> trs
+    app -- "tauri-runtime traits" --> trs
     rt --> wv
-    wv -- "WebView API, delegates" --> servo
-    proto -- "ProtocolRegistry, request interception" --> servo
+    wv -- "WebView API" --> servo
+    proto --> servo
     servo -- "IPC requests" --> proto
-    proto -- "Tauri's handlers, on the main thread" --> app
+    proto -- "Tauri's handlers" --> app
 ```
 
 ## Status
 
-Early, and working for the app it was written for: version 0.1.0, run by VODscribe's Servo build. Everything listed as working has been run on Linux under X11, on a desktop and headless under Xvfb. Unit tests cover the conversions that need no display (geometry and DPI, keys and mouse buttons, the app's URLs, IPC requests and headers, `eval` results); a contract test checks the dispatchers' errors under Xvfb; and CI runs the example headless and checks every `RESULT` line it prints (the [smoke test](examples/helloworld/README.md#the-smoke-test)).
+Version 0.1.0. Linux under X11 only, tested on a desktop and headless under Xvfb.
 
-Works:
+Works: windows and menus through tao, several windows, child webviews; Tauri's IPC (commands, events, plugins, capabilities); pages on `tauri://localhost` and on a `devUrl`; initialization scripts, `eval`, load events, navigation policy; `alert()`, `confirm()` and `prompt()` as GTK dialogs; storage and cookies in the app's data folder; Media Source Extensions; end-to-end tests over WebDriver.
 
-- windows and their getters and setters, through tao as with wry on Linux; several windows; child webviews placed by bounds;
-- menus through Tauri's menu API: the window's menu bar sits above the page, which moves with it when the bar is hidden or shown;
-- Tauri's IPC: commands (sync, async, failing, raw bytes with headers), events, plugins' JavaScript APIs, capabilities and the ACL;
-- the app's own pages on `tauri://localhost` (production builds) and a `devUrl` (development);
-- initialization scripts, `eval` with its result as JSON, page load events, navigation policy, title changes;
-- `alert()`, `confirm()` and `prompt()` as GTK dialogs;
-- the page's storage, cookies and HSTS list kept in the app's local data folder;
-- Media Source Extensions (through the Servo fork) and the rest of Servo's web platform;
-- end-to-end tests over W3C WebDriver (the `webdriver` feature).
+Not yet: Wayland, macOS and Windows; devtools; printing; the cookie API; `<select>`, colour and file pickers; context menus; `window.open`; drag and drop; cursor shapes. Keys go to a window's first webview only. Webview attributes other than the URL, initialization scripts, `data_directory`, `focus`, `bounds` and `auto_resize` are ignored.
 
-Does not work yet (each returns a `tauri_runtime::Error` or logs a warning):
+Next, roughly in order: pickers and context menus, the cookie API, Wayland, devtools, then macOS and Windows.
 
-- Wayland, macOS and Windows (the crate refuses to build off Linux);
-- devtools (Servo has no built-in inspector; the methods exist in every build, because this crate turns on `tauri-runtime`'s `devtools` feature so the trait and its implementation never disagree between profiles), printing, moving a webview to another window;
-- the cookie API (`cookies`, `set_cookie`, `delete_cookie`), clearing browsing data, a webview's background colour;
-- `<select>` pickers, colour and file pickers, input methods and context menus (Servo asks for them; nothing is drawn, so the default answer is taken);
-- `window.open`, permission prompts (denied), HTTP authentication (cancelled), the page moving or resizing its window;
-- wry's `window.ipc.postMessage` fallback (Tauri only uses it when its `ipc://` request fails, which it does not here).
+## Requirements
 
-Missing without an error or a warning:
-
-- drag and drop: `WindowEvent::DragDrop` and `WebviewEvent::DragDrop` never fire, so files dropped on a window do nothing;
-- the mouse cursor never changes shape (over links, text or resize handles, it stays the window's);
-- keys go only to a window's first webview, whichever has focus (`set_focus` on a child webview moves Servo's focus, not the keys);
-- 22 webview attributes are ignored: `user_agent`, `incognito`, `javascript_disabled`, `transparent`, `proxy_url`, `devtools`, `background_color`, `zoom_hotkeys_enabled`, `clipboard`, `drag_drop_handler_enabled`, `additional_browser_args`, `use_https_scheme` (app pages are always `http://tauri.localhost`), `background_throttling`, `scroll_bar_style`, `general_autofill_enabled`, `browser_extensions_enabled`, `extensions_path`, `data_store_identifier`, `accept_first_mouse`, `allow_link_preview`, `window_effects`, `traffic_light_position` (the ones used: the URL, initialization scripts, `data_directory`, `focus`, `bounds`, `auto_resize`).
-
-## Requirements and platform support
-
-| | Supported | Notes |
-|---|---|---|
-| Linux, X11 | yes | GTK 3 windows (tao 0.37); the webview is an X11 child window with an EGL surface |
-| Linux, Wayland | not yet | `GDK_BACKEND=x11` runs the app under XWayland |
-| macOS, Windows | not yet | `compile_error!` off Linux |
-| Rust | 1.99.1 | the toolchain the Servo fork is built with (`rust-toolchain.toml`); `RUSTC_BOOTSTRAP` for mozjs, see below |
-| Tauri | 2.12 (`tauri` 2.12.3, `tauri-runtime` =2.12.1, `tauri-utils` =2.10.2) | the runtime traits are not semver-stable, so the pins are exact |
-| libservo | the [Airodonack/servo](https://github.com/Airodonack/servo) fork, branch `vodscribe/main` (Servo main after 0.7.0, e10d0a00eb, + Media Source Extensions) | a path dependency for now, see [Using it](#using-it-in-a-tauri-app) |
-| Stylo | Servo's pinned Stylo (890aa121c) plus the fork's style properties (branch `vodscribe/main` of [Airodonack/stylo](https://github.com/Airodonack/stylo), a git dependency) | patched in by every consumer, see below |
-| GStreamer | 1.26 or newer to build (the Rust bindings for `gstreamer-mse-1.0` ask pkg-config for 1.26, though mselib itself is in gst-plugins-bad since 1.24); 1.28 recommended to run. Ubuntu 24.04 ships 1.24 and cannot build it; 26.04 ships 1.28 | media; the X11, EGL and GTK development packages are listed in [.github/workflows/check.yml](.github/workflows/check.yml) |
-| WebKitGTK 4.1 development files | build time only | `tauri` and `tauri-runtime` depend on `webkit2gtk` on Linux whatever the runtime; nothing of it is linked into the binary |
+| | |
+|---|---|
+| Linux, X11 | GTK 3 windows (tao 0.37). Under Wayland, set `GDK_BACKEND=x11`. |
+| Rust 1.99.1 | The Servo fork's toolchain, in `rust-toolchain.toml`. |
+| Tauri 2.12 | `tauri` 2.12.3, `tauri-runtime` =2.12.1, `tauri-utils` =2.10.2. The runtime traits are not semver-stable, so the pins are exact. |
+| libservo | The [Airodonack/servo](https://github.com/Airodonack/servo) fork, branch `vodscribe/main`, as a sibling checkout. |
+| Stylo | Branch `vodscribe/main` of [Airodonack/stylo](https://github.com/Airodonack/stylo), a git dependency every app patches in (below). |
+| GStreamer | 1.26 or newer to build, 1.28 to run. Ubuntu 26.04 has 1.28. |
+| Packages | X11, EGL, GTK 3 and WebKitGTK 4.1 development files; see [check.yml](.github/workflows/check.yml). |
 
 ## Quick start
-
-The crate builds against a sibling checkout of the Servo fork (the layout below); Stylo comes from its git source, so it needs no checkout. With Rust (rustup), clang, the packages from the table and room for Servo's build (tens of gigabytes):
 
 ```sh
 mkdir servo-work && cd servo-work
@@ -98,11 +62,11 @@ export CC=clang CXX=clang++   # mozjs is built with clang
 cargo run --release -p helloworld
 ```
 
-The first build compiles Servo and takes a while (tens of minutes on a laptop). A window titled "Hello from Servo" opens; the page and the terminal print `RESULT` lines for each IPC check it makes. The [example's README](examples/helloworld/README.md) says what each line proves and how to run it headless.
+The first build compiles Servo and takes tens of minutes and tens of gigabytes. A window titled "Hello from Servo" opens and prints a `RESULT` line for each IPC check. See the [example](examples/helloworld/README.md).
 
 ## Using it in a Tauri app
 
-**1. The dependencies.** Turn `tauri`'s default features off (they pull in wry) and add the runtime:
+**1. Dependencies.** Turn off `tauri`'s default features, which pull in wry, and add the runtime:
 
 ```toml
 [dependencies]
@@ -110,7 +74,7 @@ tauri = { version = "=2.12.3", default-features = false, features = ["compressio
 tauri-runtime-servo = { path = "../tauri-servo/tauri-runtime-servo" }
 ```
 
-**2. The Stylo patch.** The fork's layout reads style properties (`scrollbar-gutter`, `accent-color`) that the Stylo Servo pins (890aa121c) leaves out of Servo's style structs, so the build needs the fork's Stylo branch (`vodscribe/main` of [Airodonack/stylo](https://github.com/Airodonack/stylo), that Stylo plus two commits: `scrollbar-gutter` and `accent-color` compiled for Servo, and a UA-only `-servo-accent-color` keyword). Servo takes Stylo from its git repository, so the block patches that source, not crates.io. Cargo applies `[patch]` only from the workspace a build starts in, never from a dependency, so your app's root `Cargo.toml` needs the same block this repository's has. All eleven crates of Stylo's workspace are patched together: patching `stylo` alone builds two copies of the shared ones, which do not fit together.
+**2. The Stylo patch.** The fork needs its own Stylo branch. Cargo applies `[patch]` only from the root workspace, so add this to your app's root `Cargo.toml`. Patch all eleven crates; patching `stylo` alone builds two copies of the shared ones.
 
 ```toml
 [patch."https://github.com/servo/stylo"]
@@ -127,16 +91,16 @@ to_shmem = { git = "https://github.com/Airodonack/stylo", rev = "e3320a1f1a72f2e
 to_shmem_derive = { git = "https://github.com/Airodonack/stylo", rev = "e3320a1f1a72f2ed8aca91769b5edfb86c46a543" }
 ```
 
-Without it the build stops in `servo-layout` with ``no field `scrollbar_gutter` on type `&style::properties::style_structs::Box` ``.
+Without it the build fails in `servo-layout` with ``no field `scrollbar_gutter` ``.
 
-**3. The compiler settings.** mozjs and Servo's script crates use nightly features on the stable toolchain. Like the fork, put this in your app's `.cargo/config.toml` (Cargo reads it from where the build starts, not from dependencies), and use the fork's toolchain, 1.99.1 (a `rust-toolchain.toml` with `channel = "1.99.1"`):
+**3. Compiler settings.** mozjs and Servo's script crates use nightly features on stable. Put this in your app's `.cargo/config.toml` and use Rust 1.99.1:
 
 ```toml
 [env]
 RUSTC_BOOTSTRAP = "crown,script,script_webcrypto,script_webgpu,script_bindings,style_tests,mozjs,mozjs_sys"
 ```
 
-**4. The builder.** Name the runtime in the builder's type:
+**4. The builder.**
 
 ```rust
 use tauri_runtime_servo::ServoRuntime;
@@ -148,62 +112,42 @@ fn main() {
 }
 ```
 
-`WebviewWindow::with_webview` hands you the `servo::WebView` (`webview.downcast_ref::<servo::WebView>()`), and the crate re-exports `servo` and `tao` so you use the same versions it does.
+`WebviewWindow::with_webview` gives you the `servo::WebView` through `downcast_ref`. The crate re-exports `servo` and `tao`.
 
-### Feature flags
+### Feature flags and environment
 
-| Feature | Default | What it does, and why |
-|---|---|---|
-| `webdriver` | off | Builds in Servo's WebDriver server so end-to-end tests drive the app over W3C WebDriver, with no tauri-driver. **Test builds only**: the server listens on the loopback interface only (`127.0.0.1`), so no other machine can reach it, but any program on this one can, and it runs any script it is sent in the app's pages, which can call the app's commands. Never ship it. |
-
-### Environment variables
-
-| Variable | What it does, and why |
+| | |
 |---|---|
-| `TAURI_RUNTIME_SERVO_WEBDRIVER_PORT` | With the `webdriver` feature, the port the WebDriver server listens on, on `127.0.0.1`. Unset or empty: no server. Without the feature it only logs an error, so a test setting it against a wrong build says so. |
-| `XDG_DATA_HOME` | Where the page's storage, cookies and HSTS list go: Tauri hands every webview its app local data folder (`$XDG_DATA_HOME/<identifier>`, or `~/.local/share/<identifier>`), and Servo keeps one store for the process in the first webview's. Point it at a scratch folder for tests. |
-| `RUST_LOG` | The runtime logs through `log` under `tauri_runtime_servo`; the page's console under the target `console`, at debug level (`RUST_LOG=console=debug` to see it): a page's console is no place for an app's log file. |
-| `GDK_BACKEND` | `x11` under a Wayland session, so the windows are X11 ones (through XWayland). |
+| `webdriver` feature | Builds in Servo's WebDriver server for end-to-end tests. Test builds only: it runs any script it is sent. |
+| `TAURI_RUNTIME_SERVO_WEBDRIVER_PORT` | The port the WebDriver server listens on, on `127.0.0.1`. Unset: no server. |
+| `XDG_DATA_HOME` | Where storage and cookies go: `$XDG_DATA_HOME/<identifier>`. One store per process. |
+| `RUST_LOG` | The runtime logs under `tauri_runtime_servo`; the page's console under `console` at debug level. |
 
-## How it fits Tauri and Servo
+## Notes on the design
 
-- **Tauri** talks to a runtime through the `tauri-runtime` traits (`Runtime`, `RuntimeHandle`, `WindowDispatch`, `WebviewDispatch`). They are marked unstable, so this crate pins `tauri-runtime` and `tauri-utils` exactly and moves with Tauri deliberately, one minor version at a time. The window and dispatcher plumbing is adapted from `tauri-runtime-wry` 2.12.1, so windows behave as they do under wry.
-- **Windows** are tao windows (GTK 3), so menus, dialogs' parents and anything a plugin reaches through the GTK window work as on wry. Servo paints into an X11 child window of the toplevel through EGL, placed on the part of the window's GTK box that the page owns: below a menu bar, which Tauri packs into the same box, and following it as the window is resized or the bar is shown or hidden (wry puts its WebKitGTK widget in that box the same way). The child takes no input, and the runtime forwards GTK's pointer and key events to Servo.
-- **IPC** is the part that differs most. Tauri's `ipc://`, `tauri://`, `asset://` and the plugins' schemes become Servo protocol handlers that call Tauri's handlers on the main thread, as WebKitGTK does. The app's pages load as `http://tauri.localhost/` (wry's URL on Windows) and are answered by Tauri's `tauri` handler through Servo's request interception, because a page on a custom scheme gets an opaque origin in Servo (no storage). Tauri still sees `tauri://localhost` everywhere it looks. An app page the runtime cannot hand to Tauri gets an error response; it never goes to the network, where `tauri.localhost` would reach whatever local server listens on port 80.
-- **Servo** is one instance for the process, built at the first webview: its protocol registry and data directory are fixed then. It is the Airodonack fork of Servo's main branch (e10d0a00eb, after the 0.7.0 release), which adds Media Source Extensions over GStreamer's mselib; the plan is to follow upstream releases and drop the fork as the work lands upstream.
+- Tauri's `ipc://`, `tauri://`, `asset://` and plugin schemes become Servo protocol handlers that call Tauri's handlers on the main thread. App pages load as `http://tauri.localhost/` because a custom scheme gets no storage in Servo; Tauri still sees `tauri://localhost`.
+- Servo is one instance per process, built at the first webview. Its data directory and protocol list are fixed then.
+- Windows are tao windows, so menus and dialogs work as under wry. Servo paints into an X11 child window below the menu bar; the runtime forwards GTK's input to it.
+- The window and dispatcher code is adapted from `tauri-runtime-wry` 2.12.1.
 
-## Known limitations and roadmap
+## Contributing
 
-- One data directory per process: only the first webview's `data_directory` counts (Servo keeps one storage per process).
-- A URI scheme first registered after the first webview was made cannot be added (Servo's protocol registry is fixed when it is built); the runtime logs it.
-- Keys go to the window's first webview; pointer events to every webview under the pointer.
-- libservo is a path dependency on a sibling checkout of the Servo fork; Stylo is a git dependency. Publishing on crates.io waits on libservo being usable from crates.io with the fork's changes, or on git dependencies for the Servo fork too.
+Open an issue with the Tauri version, the log with `RUST_LOG=warn,tauri_runtime_servo=debug`, and the smallest page that shows the problem. Before a pull request, run the checks in [check.yml](.github/workflows/check.yml). Never run `cargo fmt --all` here: it reformats the Servo checkout too.
 
-Next, roughly in order: the embedder controls (`<select>`, file and colour pickers, context menus), the cookie API, Wayland, devtools through Servo's Firefox-remote server, then macOS and Windows.
+## Licence
 
-## Reporting problems and contributing
+Apache License 2.0 or MIT, at your option. Copyright Airodonack. Parts are adapted from [tauri-runtime-wry](https://github.com/tauri-apps/tauri/tree/dev/crates/tauri-runtime-wry), Copyright 2019-2024 Tauri Programme within The Commons Conservancy; see [NOTICE](NOTICE).
 
-Open an issue on [Airodonack/tauri-runtime-servo](https://github.com/Airodonack/tauri-runtime-servo/issues) with the Tauri version, the log with `RUST_LOG=warn,tauri_runtime_servo=debug`, and the smallest page or app that shows it. Bugs in Servo itself belong with [Servo](https://github.com/servo/servo) when they reproduce in servoshell; mention them here too if they block an app. Pull requests are welcome: run the checks in [.github/workflows/check.yml](.github/workflows/check.yml) first (`cargo fmt -p tauri-runtime-servo -p helloworld -p menubar -- --check`, `cargo clippy --release --workspace --all-targets --all-features -- -D warnings`, `xvfb-run -a cargo test --release -p tauri-runtime-servo -- --include-ignored`, and after `cargo build --release -p helloworld`, `examples/helloworld/smoke-test.sh target/release/helloworld`). Never `cargo fmt --all` here: it would reformat the Servo checkout the path dependencies point at.
-
-## Licence and acknowledgements
-
-Licensed under either of [Apache License 2.0](LICENSE-APACHE) or [MIT](LICENSE-MIT), at your option. Copyright Airodonack.
-
-The window, monitor and dispatcher plumbing is adapted from [tauri-runtime-wry](https://github.com/tauri-apps/tauri/tree/dev/crates/tauri-runtime-wry) 2.12.1, Copyright 2019-2024 Tauri Programme within The Commons Conservancy, Apache-2.0 OR MIT; see [NOTICE](NOTICE). The input conversion and the WebDriver command handling are this crate's own, written against libservo's public API; servoshell, Servo's own browser shell, was the reference for what an embedder has to handle (which events and commands, and how a page should behave under them, such as how far a wheel click scrolls). Thanks to the Tauri and Servo projects, whose work this only connects.
-
-## What is in this directory
+## Layout
 
 | Path | What it holds |
 |---|---|
-| [`src/`](src/README.md) | The runtime's source: event loop, windows, webviews, IPC schemes, input, dialogs, WebDriver. Start there to see how it works. |
-| [`examples/`](examples/README.md) | Runnable Tauri apps on this runtime; `helloworld` exercises every IPC surface and prints a `RESULT` line for each, `menubar` checks that a window's menu bar sits above the page. |
-| [`docs/`](docs/README.md) | Images the READMEs use (the helloworld screenshot). |
-| [`.github/workflows/`](.github/workflows/README.md) | CI: formatting, lints, tests, the example's build on Ubuntu, and the example run headless as a smoke test. |
-| [`.cargo/`](.cargo/README.md) | Cargo configuration for this workspace (`RUSTC_BOOTSTRAP` for mozjs and Servo's script crates). |
-| `Cargo.toml` | The crate and the workspace (with the examples), its pinned Tauri and Servo dependencies, the Stylo patch block, the features. |
-| `Cargo.lock` | The exact dependency versions the checks ran with. |
-| `rust-toolchain.toml` | The Rust toolchain, 1.99.1: the one the Servo fork is built with. |
-| `CHANGELOG.md` | What changed in each release, for someone using the crate. |
-| `LICENSE-APACHE`, `LICENSE-MIT` | The two licences, at your option. |
-| `NOTICE` | The copyright of the tauri-runtime-wry code this crate adapts. |
-| `.gitignore` | Keeps build output, scratch files and the examples' generated schemas out of git. |
+| [`src/`](src/README.md) | The runtime. |
+| [`examples/`](examples/README.md) | `helloworld` checks every IPC surface; `menubar` checks a window with a menu bar. |
+| [`docs/`](docs/README.md) | Images for the READMEs. |
+| [`.github/workflows/`](.github/workflows/README.md) | CI. |
+| [`.cargo/`](.cargo/README.md) | `RUSTC_BOOTSTRAP` for the build. |
+| `Cargo.toml`, `Cargo.lock` | The crate, the workspace, the pins and the Stylo patch. |
+| `rust-toolchain.toml` | Rust 1.99.1. |
+| `CHANGELOG.md` | What changed in each release. |
+| `LICENSE-APACHE`, `LICENSE-MIT`, `NOTICE` | Licences and the tauri-runtime-wry copyright. |
