@@ -22,6 +22,7 @@ under the closing "Fixes" bullet.
 - Unhandled app pages show an error. They are never fetched from the
   network.
 - Console output lands in debug logs.
+- Pages can use OffscreenCanvas.
 - Fixes:
   - Oversized margins no longer crash. A `preventOverflow` margin wider
     than the screen shrinks the window to the room left; debug builds

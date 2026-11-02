@@ -170,6 +170,10 @@ impl<T: UserEvent> Context<T> {
             // Off by default in Servo (experimental); SvelteKit's link
             // preloader throws without it.
             dom_intersection_observer_enabled: true,
+            // Off by default in Servo (experimental); scripts that read an
+            // image's pixels without a document canvas use it, VODscribe's
+            // thumbnail checks among them.
+            dom_offscreen_canvas_enabled: true,
             ..Default::default()
         };
         // Media Source Extensions exist in the fork's libservo only: set by
