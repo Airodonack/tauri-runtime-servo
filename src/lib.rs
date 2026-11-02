@@ -1,35 +1,31 @@
 //! A Tauri [`Runtime`](tauri_runtime::Runtime) over libservo.
 //!
-//! Windows are tao windows (GTK 3 on Linux), so everything Tauri and its
-//! plugins reach through the native window (menus, dialogs' parent, the GTK
-//! window and its vbox) works as with the wry runtime. The webview is a Servo
-//! [`WebView`](servo::WebView) painting through a `WindowRenderingContext` on
-//! a native child surface the runtime owns: on X11 a child window of the
-//! toplevel's, with an empty input region so GTK keeps receiving the pointer
-//! and the keyboard; the runtime forwards those events to Servo itself.
+//! Windows are tao windows (GTK 3 on Linux), so menus, dialogs and anything a
+//! plugin reaches through the native window work as with wry. The webview is
+//! a Servo [`WebView`](servo::WebView) painting into a child window of the
+//! toplevel. The child takes no input; the runtime forwards GTK's pointer and
+//! key events to Servo.
 //!
 //! Use it as `tauri::Builder::<ServoRuntime<tauri::EventLoopMessage>>::new()`
 //! with `tauri`'s default features off.
 //!
-//! The dispatcher and window plumbing (the `Message` enum, the main-thread
-//! context, the window builder and the window getters and setters) is adapted
-//! from tauri-runtime-wry 2.12.1, Copyright 2019-2024 Tauri Programme within
-//! The Commons Conservancy, Apache-2.0 OR MIT.
+//! Tauri's IPC works as on wry: the `ipc`, `tauri`, `asset` and plugin
+//! schemes are Servo protocol handlers that call Tauri's handlers (see
+//! `protocol`), initialization scripts are Servo user scripts, and `eval`
+//! returns its result as JSON.
 //!
-//! Tauri's IPC works as on wry: the custom URI schemes (`ipc`, `tauri`,
-//! `asset`, the plugins') are Servo protocol handlers forwarding to Tauri's
-//! (see `protocol`), the initialization scripts are Servo user scripts, and
-//! `eval` returns its result as JSON.
+//! With the `webdriver` feature, the runtime starts Servo's WebDriver server
+//! on the port named by `TAURI_RUNTIME_SERVO_WEBDRIVER_PORT`
+//! ([`WEBDRIVER_PORT_VARIABLE`]), so end-to-end tests drive the app without
+//! tauri-driver. The server listens on the loopback interface and runs any
+//! script it is sent: test builds only.
 //!
-//! For end-to-end tests, a build with the `webdriver` feature starts Servo's
-//! WebDriver server when `TAURI_RUNTIME_SERVO_WEBDRIVER_PORT` names a port
-//! ([`WEBDRIVER_PORT_VARIABLE`]): a test client talks W3C WebDriver to the
-//! app on that port directly (no tauri-driver). The page's dialogs are its
-//! user prompts. The server listens on the loopback interface only, but it
-//! runs any script it is sent, so the feature is for test builds only.
+//! Linux on X11 only. What Servo cannot do yet returns a
+//! [`tauri_runtime::Error`].
 //!
-//! Status: Linux on X11 only; the webview operations Servo cannot do yet
-//! return [`tauri_runtime::Error`]s.
+//! The window and dispatcher code is adapted from tauri-runtime-wry 2.12.1,
+//! Copyright 2019-2024 Tauri Programme within The Commons Conservancy,
+//! Apache-2.0 OR MIT.
 
 #[cfg(not(target_os = "linux"))]
 compile_error!("tauri-runtime-servo supports Linux (X11) only for now");
