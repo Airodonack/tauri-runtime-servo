@@ -86,6 +86,8 @@ webdriver_server = { package = "servo-webdriver-server", path = "../../servo/com
 crossbeam-channel = "0.5"
 
 [dev-dependencies]
+# libservo's JSValue::Object is an IndexMap: the unit tests build one.
+indexmap = "2"
 # A `WebViewId` for the routing tests (libservo re-exports the type, not
 # its test constant). Already part of the build through libservo.
 servo_base = { package = "servo-base", path = "../../servo/components/shared/base" }

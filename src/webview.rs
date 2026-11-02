@@ -857,7 +857,7 @@ impl<T: UserEvent> WebviewDispatch<T> for ServoWebviewDispatcher<T> {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::HashMap;
+    use indexmap::IndexMap;
 
     use servo::JavaScriptErrorInfo;
 
@@ -901,12 +901,12 @@ mod tests {
 
     #[test]
     fn an_object_leaves_out_its_undefined_members() {
-        let object = JSValue::Object(HashMap::from([
+        let object = JSValue::Object(IndexMap::from([
             ("answer".to_owned(), JSValue::Number(42.0)),
             ("gone".to_owned(), JSValue::Undefined),
             (
                 "nested".to_owned(),
-                JSValue::Object(HashMap::from([(
+                JSValue::Object(IndexMap::from([(
                     "flag".to_owned(),
                     JSValue::Boolean(false),
                 )])),
