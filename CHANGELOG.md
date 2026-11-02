@@ -23,6 +23,7 @@ under the closing "Fixes" bullet.
   network.
 - Console output lands in debug logs.
 - Pages can use OffscreenCanvas.
+- Pages can clamp text with -webkit-line-clamp.
 - Fixes:
   - Oversized margins no longer crash. A `preventOverflow` margin wider
     than the screen shrinks the window to the room left; debug builds
