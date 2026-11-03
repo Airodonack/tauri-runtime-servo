@@ -131,6 +131,14 @@ impl WebDriver {
         }
     }
 
+    /// The webview's load was stopped before it completed, by `window.stop()`
+    /// or the embedder; a navigation waiting on it ends as servoshell's does.
+    pub fn load_stopped(&self, webview: WebViewId) {
+        if let Some(sender) = self.load_waits.borrow_mut().remove(&webview) {
+            let _ = sender.send(WebDriverLoadStatus::NavigationStop);
+        }
+    }
+
     /// A back or forward traversal finished.
     pub fn traversal_complete(&self, traversal: TraversalId) {
         if let Some(sender) = self.traversal_waits.borrow_mut().remove(&traversal) {

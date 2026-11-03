@@ -78,17 +78,17 @@ tauri-runtime-servo = { path = "../tauri-servo/tauri-runtime-servo" }
 
 ```toml
 [patch."https://github.com/servo/stylo"]
-selectors = { git = "https://github.com/Airodonack/stylo", rev = "e3320a1f1a72f2ed8aca91769b5edfb86c46a543" }
-servo_arc = { git = "https://github.com/Airodonack/stylo", rev = "e3320a1f1a72f2ed8aca91769b5edfb86c46a543" }
-stylo = { git = "https://github.com/Airodonack/stylo", rev = "e3320a1f1a72f2ed8aca91769b5edfb86c46a543" }
-stylo_atoms = { git = "https://github.com/Airodonack/stylo", rev = "e3320a1f1a72f2ed8aca91769b5edfb86c46a543" }
-stylo_derive = { git = "https://github.com/Airodonack/stylo", rev = "e3320a1f1a72f2ed8aca91769b5edfb86c46a543" }
-stylo_dom = { git = "https://github.com/Airodonack/stylo", rev = "e3320a1f1a72f2ed8aca91769b5edfb86c46a543" }
-stylo_malloc_size_of = { git = "https://github.com/Airodonack/stylo", rev = "e3320a1f1a72f2ed8aca91769b5edfb86c46a543" }
-stylo_static_prefs = { git = "https://github.com/Airodonack/stylo", rev = "e3320a1f1a72f2ed8aca91769b5edfb86c46a543" }
-stylo_traits = { git = "https://github.com/Airodonack/stylo", rev = "e3320a1f1a72f2ed8aca91769b5edfb86c46a543" }
-to_shmem = { git = "https://github.com/Airodonack/stylo", rev = "e3320a1f1a72f2ed8aca91769b5edfb86c46a543" }
-to_shmem_derive = { git = "https://github.com/Airodonack/stylo", rev = "e3320a1f1a72f2ed8aca91769b5edfb86c46a543" }
+selectors = { git = "https://github.com/Airodonack/stylo", rev = "2cb19bad019442e58d36a68c5a39252e1f56a241" }
+servo_arc = { git = "https://github.com/Airodonack/stylo", rev = "2cb19bad019442e58d36a68c5a39252e1f56a241" }
+stylo = { git = "https://github.com/Airodonack/stylo", rev = "2cb19bad019442e58d36a68c5a39252e1f56a241" }
+stylo_atoms = { git = "https://github.com/Airodonack/stylo", rev = "2cb19bad019442e58d36a68c5a39252e1f56a241" }
+stylo_derive = { git = "https://github.com/Airodonack/stylo", rev = "2cb19bad019442e58d36a68c5a39252e1f56a241" }
+stylo_dom = { git = "https://github.com/Airodonack/stylo", rev = "2cb19bad019442e58d36a68c5a39252e1f56a241" }
+stylo_malloc_size_of = { git = "https://github.com/Airodonack/stylo", rev = "2cb19bad019442e58d36a68c5a39252e1f56a241" }
+stylo_static_prefs = { git = "https://github.com/Airodonack/stylo", rev = "2cb19bad019442e58d36a68c5a39252e1f56a241" }
+stylo_traits = { git = "https://github.com/Airodonack/stylo", rev = "2cb19bad019442e58d36a68c5a39252e1f56a241" }
+to_shmem = { git = "https://github.com/Airodonack/stylo", rev = "2cb19bad019442e58d36a68c5a39252e1f56a241" }
+to_shmem_derive = { git = "https://github.com/Airodonack/stylo", rev = "2cb19bad019442e58d36a68c5a39252e1f56a241" }
 ```
 
 Without it the build fails in `servo-layout` with ``no field `scrollbar_gutter` ``.

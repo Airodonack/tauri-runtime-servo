@@ -231,6 +231,12 @@ impl WebViewDelegate for Delegate {
                 self.webdriver.load_complete(webview.id());
                 PageLoadEvent::Finished
             }
+            // Tauri has no stopped event; WebKitGTK under wry also ends a
+            // stopped load with its finished event.
+            LoadStatus::Stopped => {
+                self.webdriver.load_stopped(webview.id());
+                PageLoadEvent::Finished
+            }
             LoadStatus::HeadParsed => {
                 // The document exists and the initialization scripts have run.
                 let pending = self.pending_evals.borrow_mut().take();

@@ -11,17 +11,17 @@ members = [".", "examples/helloworld", "examples/menubar"]
 # on this crate, needs the same block. Every crate of Stylo's workspace is
 # patched together, or two copies of the shared ones get built.
 [patch."https://github.com/servo/stylo"]
-selectors = { git = "https://github.com/Airodonack/stylo", rev = "5ae7a221216e67947f3662838c5fdd552468c76d" }
-servo_arc = { git = "https://github.com/Airodonack/stylo", rev = "5ae7a221216e67947f3662838c5fdd552468c76d" }
-stylo = { git = "https://github.com/Airodonack/stylo", rev = "5ae7a221216e67947f3662838c5fdd552468c76d" }
-stylo_atoms = { git = "https://github.com/Airodonack/stylo", rev = "5ae7a221216e67947f3662838c5fdd552468c76d" }
-stylo_derive = { git = "https://github.com/Airodonack/stylo", rev = "5ae7a221216e67947f3662838c5fdd552468c76d" }
-stylo_dom = { git = "https://github.com/Airodonack/stylo", rev = "5ae7a221216e67947f3662838c5fdd552468c76d" }
-stylo_malloc_size_of = { git = "https://github.com/Airodonack/stylo", rev = "5ae7a221216e67947f3662838c5fdd552468c76d" }
-stylo_static_prefs = { git = "https://github.com/Airodonack/stylo", rev = "5ae7a221216e67947f3662838c5fdd552468c76d" }
-stylo_traits = { git = "https://github.com/Airodonack/stylo", rev = "5ae7a221216e67947f3662838c5fdd552468c76d" }
-to_shmem = { git = "https://github.com/Airodonack/stylo", rev = "5ae7a221216e67947f3662838c5fdd552468c76d" }
-to_shmem_derive = { git = "https://github.com/Airodonack/stylo", rev = "5ae7a221216e67947f3662838c5fdd552468c76d" }
+selectors = { git = "https://github.com/Airodonack/stylo", rev = "2cb19bad019442e58d36a68c5a39252e1f56a241" }
+servo_arc = { git = "https://github.com/Airodonack/stylo", rev = "2cb19bad019442e58d36a68c5a39252e1f56a241" }
+stylo = { git = "https://github.com/Airodonack/stylo", rev = "2cb19bad019442e58d36a68c5a39252e1f56a241" }
+stylo_atoms = { git = "https://github.com/Airodonack/stylo", rev = "2cb19bad019442e58d36a68c5a39252e1f56a241" }
+stylo_derive = { git = "https://github.com/Airodonack/stylo", rev = "2cb19bad019442e58d36a68c5a39252e1f56a241" }
+stylo_dom = { git = "https://github.com/Airodonack/stylo", rev = "2cb19bad019442e58d36a68c5a39252e1f56a241" }
+stylo_malloc_size_of = { git = "https://github.com/Airodonack/stylo", rev = "2cb19bad019442e58d36a68c5a39252e1f56a241" }
+stylo_static_prefs = { git = "https://github.com/Airodonack/stylo", rev = "2cb19bad019442e58d36a68c5a39252e1f56a241" }
+stylo_traits = { git = "https://github.com/Airodonack/stylo", rev = "2cb19bad019442e58d36a68c5a39252e1f56a241" }
+to_shmem = { git = "https://github.com/Airodonack/stylo", rev = "2cb19bad019442e58d36a68c5a39252e1f56a241" }
+to_shmem_derive = { git = "https://github.com/Airodonack/stylo", rev = "2cb19bad019442e58d36a68c5a39252e1f56a241" }
 
 [package]
 name = "tauri-runtime-servo"
@@ -61,7 +61,8 @@ euclid = "0.22"
 http = "1"
 url = "2"
 log = "0.4"
-# The fork's libservo with its default web features, gamepads and the GStreamer media stack.
+# The fork's libservo with its default web features, gamepads and the GStreamer
+# media stack with Media Source Extensions.
 servo = { path = "../../servo/components/servo", default-features = false, features = [
     "bundled",
     "clipboard",
@@ -70,6 +71,7 @@ servo = { path = "../../servo/components/servo", default-features = false, featu
     "default_web_features",
     "gamepad",
     "media-gstreamer",
+    "media-gstreamer-mse",
 ] }
 rustls = { version = "0.23", default-features = false, features = ["aws-lc-rs"] }
 # What a protocol handler needs to read a request body: libservo hands over
