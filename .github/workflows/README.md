@@ -1,6 +1,6 @@
 # .github/workflows
 
-CI, run on every push to `main` and every pull request, on Ubuntu 26.04 with a sibling checkout of the Servo fork.
+CI, run on every push to `main` and every pull request, on Ubuntu 26.04.
 
 | File | What it holds |
 |---|---|

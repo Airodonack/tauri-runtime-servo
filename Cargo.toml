@@ -11,17 +11,17 @@ members = [".", "examples/helloworld", "examples/menubar"]
 # on this crate, needs the same block. Every crate of Stylo's workspace is
 # patched together, or two copies of the shared ones get built.
 [patch."https://github.com/servo/stylo"]
-selectors = { git = "https://github.com/Airodonack/stylo", rev = "2cb19bad019442e58d36a68c5a39252e1f56a241" }
-servo_arc = { git = "https://github.com/Airodonack/stylo", rev = "2cb19bad019442e58d36a68c5a39252e1f56a241" }
-stylo = { git = "https://github.com/Airodonack/stylo", rev = "2cb19bad019442e58d36a68c5a39252e1f56a241" }
-stylo_atoms = { git = "https://github.com/Airodonack/stylo", rev = "2cb19bad019442e58d36a68c5a39252e1f56a241" }
-stylo_derive = { git = "https://github.com/Airodonack/stylo", rev = "2cb19bad019442e58d36a68c5a39252e1f56a241" }
-stylo_dom = { git = "https://github.com/Airodonack/stylo", rev = "2cb19bad019442e58d36a68c5a39252e1f56a241" }
-stylo_malloc_size_of = { git = "https://github.com/Airodonack/stylo", rev = "2cb19bad019442e58d36a68c5a39252e1f56a241" }
-stylo_static_prefs = { git = "https://github.com/Airodonack/stylo", rev = "2cb19bad019442e58d36a68c5a39252e1f56a241" }
-stylo_traits = { git = "https://github.com/Airodonack/stylo", rev = "2cb19bad019442e58d36a68c5a39252e1f56a241" }
-to_shmem = { git = "https://github.com/Airodonack/stylo", rev = "2cb19bad019442e58d36a68c5a39252e1f56a241" }
-to_shmem_derive = { git = "https://github.com/Airodonack/stylo", rev = "2cb19bad019442e58d36a68c5a39252e1f56a241" }
+selectors = { git = "https://github.com/Airodonack/stylo", rev = "eb9f6ae0500f2415fd9dd224780a55094ef3be18" }
+servo_arc = { git = "https://github.com/Airodonack/stylo", rev = "eb9f6ae0500f2415fd9dd224780a55094ef3be18" }
+stylo = { git = "https://github.com/Airodonack/stylo", rev = "eb9f6ae0500f2415fd9dd224780a55094ef3be18" }
+stylo_atoms = { git = "https://github.com/Airodonack/stylo", rev = "eb9f6ae0500f2415fd9dd224780a55094ef3be18" }
+stylo_derive = { git = "https://github.com/Airodonack/stylo", rev = "eb9f6ae0500f2415fd9dd224780a55094ef3be18" }
+stylo_dom = { git = "https://github.com/Airodonack/stylo", rev = "eb9f6ae0500f2415fd9dd224780a55094ef3be18" }
+stylo_malloc_size_of = { git = "https://github.com/Airodonack/stylo", rev = "eb9f6ae0500f2415fd9dd224780a55094ef3be18" }
+stylo_static_prefs = { git = "https://github.com/Airodonack/stylo", rev = "eb9f6ae0500f2415fd9dd224780a55094ef3be18" }
+stylo_traits = { git = "https://github.com/Airodonack/stylo", rev = "eb9f6ae0500f2415fd9dd224780a55094ef3be18" }
+to_shmem = { git = "https://github.com/Airodonack/stylo", rev = "eb9f6ae0500f2415fd9dd224780a55094ef3be18" }
+to_shmem_derive = { git = "https://github.com/Airodonack/stylo", rev = "eb9f6ae0500f2415fd9dd224780a55094ef3be18" }
 
 [package]
 name = "tauri-runtime-servo"
@@ -37,7 +37,7 @@ categories = ["gui", "web-programming"]
 # The window, monitor and dispatcher plumbing is adapted from tauri-runtime-wry
 # (Apache-2.0 OR MIT, see NOTICE).
 license = "Apache-2.0 OR MIT"
-# Not on crates.io yet: libservo and the Stylo branch are path dependencies.
+# Not on crates.io: libservo and the Stylo branch are git dependencies.
 publish = false
 
 [dependencies]
@@ -63,7 +63,11 @@ url = "2"
 log = "0.4"
 # The fork's libservo with its default web features, gamepads and the GStreamer
 # media stack with Media Source Extensions.
-servo = { path = "../../servo/components/servo", default-features = false, features = [
+# The fork comes from GitHub, pinned by revision; the Stylo patch above is
+# the one that revision's Cargo.toml has, and every Servo crate named here
+# takes the same revision. An app with local checkouts points them at its
+# own with `[patch."https://github.com/Airodonack/servo"]`.
+servo = { git = "https://github.com/Airodonack/servo", rev = "937da10c88ed5d79411a0f1fd14e8da1ac860d99", default-features = false, features = [
     "bundled",
     "clipboard",
     "js_jit",
@@ -76,14 +80,14 @@ servo = { path = "../../servo/components/servo", default-features = false, featu
 rustls = { version = "0.23", default-features = false, features = ["aws-lc-rs"] }
 # What a protocol handler needs to read a request body: libservo hands over
 # net's `Request`, whose body arrives over Servo's IPC channels.
-net_traits = { package = "servo-net-traits", path = "../../servo/components/shared/net" }
+net_traits = { package = "servo-net-traits", git = "https://github.com/Airodonack/servo", rev = "937da10c88ed5d79411a0f1fd14e8da1ac860d99" }
 ipc-channel = "0.23"
 parking_lot = "0.12"
 tokio = { version = "1", default-features = false, features = ["sync"] }
 serde_json = "1"
 # Servo's WebDriver server, for end-to-end tests (the `webdriver` feature):
 # not part of libservo, so the embedder starts it and answers its commands.
-webdriver_server = { package = "servo-webdriver-server", path = "../../servo/components/webdriver_server", optional = true }
+webdriver_server = { package = "servo-webdriver-server", git = "https://github.com/Airodonack/servo", rev = "937da10c88ed5d79411a0f1fd14e8da1ac860d99", optional = true }
 # The channel the server's commands arrive on (the type in Servo's API).
 crossbeam-channel = "0.5"
 
@@ -92,7 +96,7 @@ crossbeam-channel = "0.5"
 indexmap = "2"
 # A `WebViewId` for the routing tests (libservo re-exports the type, not
 # its test constant). Already part of the build through libservo.
-servo_base = { package = "servo-base", path = "../../servo/components/shared/base" }
+servo_base = { package = "servo-base", git = "https://github.com/Airodonack/servo", rev = "937da10c88ed5d79411a0f1fd14e8da1ac860d99" }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 gtk = { version = "0.18.2", features = ["v3_24"] }

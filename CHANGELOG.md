@@ -24,6 +24,8 @@ under the closing "Fixes" bullet.
 - Console output lands in debug logs.
 - Pages can use OffscreenCanvas.
 - Pages can clamp text with -webkit-line-clamp.
+- Builds without a Servo checkout. Cargo takes the Servo fork from GitHub,
+  pinned by revision.
 - Fixes:
   - Oversized margins no longer crash. A `preventOverflow` margin wider
     than the screen shrinks the window to the room left; debug builds

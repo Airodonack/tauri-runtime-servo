@@ -46,7 +46,7 @@ Next, roughly in order: pickers and context menus, the cookie API, Wayland, devt
 | Linux, X11 | GTK 3 windows (tao 0.37). Under Wayland, set `GDK_BACKEND=x11`. |
 | Rust 1.99.1 | The Servo fork's toolchain, in `rust-toolchain.toml`. |
 | Tauri 2.12 | `tauri` 2.12.3, `tauri-runtime` =2.12.1, `tauri-utils` =2.10.2. The runtime traits are not semver-stable, so the pins are exact. |
-| libservo | The [Airodonack/servo](https://github.com/Airodonack/servo) fork, branch `vodscribe/main`, as a sibling checkout. |
+| libservo | The [Airodonack/servo](https://github.com/Airodonack/servo) fork, branch `vodscribe/main`, a git dependency pinned by revision. |
 | Stylo | Branch `vodscribe/main` of [Airodonack/stylo](https://github.com/Airodonack/stylo), a git dependency every app patches in (below). |
 | GStreamer | 1.26 or newer to build, 1.28 to run. Ubuntu 26.04 has 1.28. |
 | Packages | X11, EGL, GTK 3 and WebKitGTK 4.1 development files; see [check.yml](.github/workflows/check.yml). |
@@ -54,10 +54,8 @@ Next, roughly in order: pickers and context menus, the cookie API, Wayland, devt
 ## Quick start
 
 ```sh
-mkdir servo-work && cd servo-work
-git clone -b vodscribe/main https://github.com/Airodonack/servo servo
-mkdir tauri-servo && git clone https://github.com/Airodonack/tauri-runtime-servo tauri-servo/tauri-runtime-servo
-cd tauri-servo/tauri-runtime-servo
+git clone https://github.com/Airodonack/tauri-runtime-servo
+cd tauri-runtime-servo
 export CC=clang CXX=clang++   # mozjs is built with clang
 cargo run --release -p helloworld
 ```
@@ -71,27 +69,29 @@ The first build compiles Servo and takes tens of minutes and tens of gigabytes. 
 ```toml
 [dependencies]
 tauri = { version = "=2.12.3", default-features = false, features = ["compression", "common-controls-v6", "dynamic-acl", "x11", "dbus"] }
-tauri-runtime-servo = { path = "../tauri-servo/tauri-runtime-servo" }
+tauri-runtime-servo = { git = "https://github.com/Airodonack/tauri-runtime-servo", rev = "<commit>" }
 ```
 
 **2. The Stylo patch.** The fork needs its own Stylo branch. Cargo applies `[patch]` only from the root workspace, so add this to your app's root `Cargo.toml`. Patch all eleven crates; patching `stylo` alone builds two copies of the shared ones.
 
 ```toml
 [patch."https://github.com/servo/stylo"]
-selectors = { git = "https://github.com/Airodonack/stylo", rev = "2cb19bad019442e58d36a68c5a39252e1f56a241" }
-servo_arc = { git = "https://github.com/Airodonack/stylo", rev = "2cb19bad019442e58d36a68c5a39252e1f56a241" }
-stylo = { git = "https://github.com/Airodonack/stylo", rev = "2cb19bad019442e58d36a68c5a39252e1f56a241" }
-stylo_atoms = { git = "https://github.com/Airodonack/stylo", rev = "2cb19bad019442e58d36a68c5a39252e1f56a241" }
-stylo_derive = { git = "https://github.com/Airodonack/stylo", rev = "2cb19bad019442e58d36a68c5a39252e1f56a241" }
-stylo_dom = { git = "https://github.com/Airodonack/stylo", rev = "2cb19bad019442e58d36a68c5a39252e1f56a241" }
-stylo_malloc_size_of = { git = "https://github.com/Airodonack/stylo", rev = "2cb19bad019442e58d36a68c5a39252e1f56a241" }
-stylo_static_prefs = { git = "https://github.com/Airodonack/stylo", rev = "2cb19bad019442e58d36a68c5a39252e1f56a241" }
-stylo_traits = { git = "https://github.com/Airodonack/stylo", rev = "2cb19bad019442e58d36a68c5a39252e1f56a241" }
-to_shmem = { git = "https://github.com/Airodonack/stylo", rev = "2cb19bad019442e58d36a68c5a39252e1f56a241" }
-to_shmem_derive = { git = "https://github.com/Airodonack/stylo", rev = "2cb19bad019442e58d36a68c5a39252e1f56a241" }
+selectors = { git = "https://github.com/Airodonack/stylo", rev = "eb9f6ae0500f2415fd9dd224780a55094ef3be18" }
+servo_arc = { git = "https://github.com/Airodonack/stylo", rev = "eb9f6ae0500f2415fd9dd224780a55094ef3be18" }
+stylo = { git = "https://github.com/Airodonack/stylo", rev = "eb9f6ae0500f2415fd9dd224780a55094ef3be18" }
+stylo_atoms = { git = "https://github.com/Airodonack/stylo", rev = "eb9f6ae0500f2415fd9dd224780a55094ef3be18" }
+stylo_derive = { git = "https://github.com/Airodonack/stylo", rev = "eb9f6ae0500f2415fd9dd224780a55094ef3be18" }
+stylo_dom = { git = "https://github.com/Airodonack/stylo", rev = "eb9f6ae0500f2415fd9dd224780a55094ef3be18" }
+stylo_malloc_size_of = { git = "https://github.com/Airodonack/stylo", rev = "eb9f6ae0500f2415fd9dd224780a55094ef3be18" }
+stylo_static_prefs = { git = "https://github.com/Airodonack/stylo", rev = "eb9f6ae0500f2415fd9dd224780a55094ef3be18" }
+stylo_traits = { git = "https://github.com/Airodonack/stylo", rev = "eb9f6ae0500f2415fd9dd224780a55094ef3be18" }
+to_shmem = { git = "https://github.com/Airodonack/stylo", rev = "eb9f6ae0500f2415fd9dd224780a55094ef3be18" }
+to_shmem_derive = { git = "https://github.com/Airodonack/stylo", rev = "eb9f6ae0500f2415fd9dd224780a55094ef3be18" }
 ```
 
 Without it the build fails in `servo-layout` with ``no field `scrollbar_gutter` ``.
+
+To build against a local Servo checkout, patch `https://github.com/Airodonack/servo` the same way: `servo`, `servo-net-traits` and `servo-webdriver-server`, each with the path of its folder under `components/`.
 
 **3. Compiler settings.** mozjs and Servo's script crates use nightly features on stable. Put this in your app's `.cargo/config.toml` and use Rust 1.99.1:
 
@@ -132,7 +132,7 @@ fn main() {
 
 ## Contributing
 
-Open an issue with the Tauri version, the log with `RUST_LOG=warn,tauri_runtime_servo=debug`, and the smallest page that shows the problem. Before a pull request, run the checks in [check.yml](.github/workflows/check.yml). Never run `cargo fmt --all` here: it reformats the Servo checkout too.
+Open an issue with the Tauri version, the log with `RUST_LOG=warn,tauri_runtime_servo=debug`, and the smallest page that shows the problem. Before a pull request, run the checks in [check.yml](.github/workflows/check.yml).
 
 ## Licence
 
